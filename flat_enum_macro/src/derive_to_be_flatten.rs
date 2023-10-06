@@ -4,18 +4,8 @@ use crate::util::{
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
 use std::collections::HashMap;
-use syn::spanned::Spanned;
 use syn::*;
 use template_quote::quote;
-
-fn generate_type_num(n: usize, span: &Span) -> Type {
-    if n > 0 {
-        let acc = generate_type_num(n - 1, span);
-        syn::parse(quote! { (#acc,) }.into()).expect("Cannot parse to type")
-    } else {
-        syn::parse(quote! { () }.into()).expect("Cannot parse to type")
-    }
-}
 
 fn emit_macro(
     input: &ItemEnum,
@@ -68,8 +58,8 @@ fn emit_macro(
                                         <
                                             $typ
                                             as #flat_enum::Leak<
+                                                {#{ *leak_dict.get(&field.ty).unwrap() }},
                                                 ($($enum_type_params,)*),
-                                                #{ generate_type_num(*leak_dict.get(&field.ty).unwrap(), &Span::call_site()) }
                                             >
                                         >::Ty
                                     }
@@ -135,8 +125,7 @@ fn emit_impl(input: &ItemEnum, flat_enum: &Path, leak_dict: &HashMap<Type, usize
         #(for (ty, n) in leak_dict.iter()) {
             #[automatically_derived]
             unsafe impl <#{ &generic_impl.params }> #flat_enum :: Leak <
-                (#(#arg_items,)*),
-                #{ generate_type_num(*n, &ty.span()) }
+                {#n}, (#(#arg_items,)*),
             > for #{ &input.ident } #arg
             #{ &generic_impl.where_clause }
             {

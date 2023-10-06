@@ -8,6 +8,6 @@ pub unsafe trait ToBeFlatten {}
 
 /// Leak `N`th type used in enum variants.
 #[doc(hidden)]
-pub unsafe trait Leak<EnumTypeParams, N>: ToBeFlatten {
+pub unsafe trait Leak<const N: usize, EnumTypeParams>: ToBeFlatten {
     type Ty;
 }
