@@ -1,4 +1,5 @@
 use flat_enum::{flat_enum, ToBeFlatten};
+use test_flat_enum::Enum6;
 
 #[derive(ToBeFlatten)]
 pub enum Enum1<A> {
@@ -39,5 +40,7 @@ pub mod m2 {
         Enum3(super::Enum3<A, A>),
         #[flatten]
         Enum4(super::m1::Enum4<'a, 3, A>),
+        #[flatten]
+        Enum6(super::Enum6<'a, 4, A>),
     }
 }
