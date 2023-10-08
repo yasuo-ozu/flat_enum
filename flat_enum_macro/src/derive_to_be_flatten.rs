@@ -14,9 +14,36 @@ fn emit_macro(
     leak_dict: &HashMap<Type, usize>,
 ) -> TokenStream {
     use Fields::*;
-    quote! {
+    let ret = quote! {
         #[macro_export]
         macro_rules! #macro_ident {
+            (@emit_flat $matcher:expr, $from:path, $to:path) => {
+                match $matcher {
+                    #(for variant in &input.variants) {
+                        <$from> :: #{ &variant.ident }
+                        #(if let Fields::Named(fields) = &variant.fields) {
+                            {
+                                #(for field in &fields.named) {
+                                    #{&field.ident}
+                                }
+                            } => <$to> :: #{ &variant.ident } {
+                                #(for field in &fields.named) {
+                                    #{&field.ident}
+                                }
+                            }
+                        }
+                        #(if let Fields::Unnamed(fields) = &variant.fields) {
+                            #(let ids = (0..fields.unnamed.len()).map(|i| Ident::new(&format!("a{}", i), Span::call_site())).collect::<Vec<_>>()){
+                                ( #(#ids),* ) => <$to> :: #{ &variant.ident } (#(#ids),*)
+                            }
+                        }
+                        #(if let Fields::Unit = &variant.fields) {
+                            => <$to> :: #{ &variant.ident }
+                        },
+                    }
+                }
+
+            };
             (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ]) => {
                 $($enum_decl)* { $($out)* }
             };
@@ -71,7 +98,9 @@ fn emit_macro(
                 );
             };
         }
-    }
+    };
+    dbg!(ret.to_string());
+    ret
 }
 
 fn emit_macro_export_in_macro_namespace(
