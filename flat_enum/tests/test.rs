@@ -18,9 +18,9 @@ pub enum Enum2<B> {
 #[derive(ToBeFlatten)]
 pub enum Enum3<A, B> {
     #[flatten]
-    Enum1(Enum1<A>),
+    MyEnum1(Enum1<A>),
     #[flatten]
-    Enum2(Enum2<B>),
+    MyEnum2(Enum2<B>),
     E6,
 }
 
@@ -37,10 +37,10 @@ pub mod m2 {
     #[flat_enum]
     pub enum Enum5<'a, A> {
         #[flatten]
-        Enum3(super::Enum3<A, A>),
+        MyEnum3(super::Enum3<A, A>),
         #[flatten]
-        Enum4(super::m1::Enum4<'a, 3, A>),
+        MyEnum4(super::m1::Enum4<'a, 3, A>),
         #[flatten]
-        Enum6(super::Enum6<'a, 4, A>),
+        MyEnum6(super::Enum6<'a, 4, A>),
     }
 }

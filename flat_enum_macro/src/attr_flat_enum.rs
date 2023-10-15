@@ -92,6 +92,7 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
         match variant {
             ParsedVariant::Normal(variant) => out.extend(quote! {{#variant}}),
             ParsedVariant::Flattened {
+                ident,
                 ty,
                 macro_path,
                 arg_tys,
@@ -99,9 +100,9 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
             } => {
                 if first_macro_path.is_none() {
                     first_macro_path = Some(macro_path.clone());
-                    out.extend(quote! { @ [ #ty, #(#arg_tys),* ] });
+                    out.extend(quote! { @ [ #ident, (#ty), #(#arg_tys),* ] });
                 } else {
-                    out.extend(quote! { (#macro_path) [ #ty, #(#arg_tys),* ] })
+                    out.extend(quote! { (#macro_path) [ #ident, (#ty), #(#arg_tys),* ] })
                 }
             }
         }
@@ -217,13 +218,20 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
                             }
                             #(if let ParsedVariant::Flattened{ident, macro_path, ..} = variant) {
                                 #ident_unflat :: #ident (item) => {
-                                    #macro_path ! (@emit_flat item, #ident_unflat, Self);
+                                    #macro_path ! (@emit_flat item, (#macro_path), Self)
                                 }
                             },
                         }
                     }
                 }
-                fn unflat(self) -> Self::Unflat { todo!() }
+
+                fn unflat(self) -> Self::Unflat {
+                    #mac!(
+                        @emit_unflat #mac []
+                        (self, Self, Self::Unflat)
+                        #out
+                    );
+                }
                 fn unflat_ref<#lt>(&#lt self) -> Self::UnflatRef<#lt>
                 where
                     Self: #lt { todo!() }

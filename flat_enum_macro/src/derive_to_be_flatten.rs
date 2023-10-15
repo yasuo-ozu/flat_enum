@@ -14,13 +14,13 @@ fn emit_macro(
     leak_dict: &HashMap<Type, usize>,
 ) -> TokenStream {
     use Fields::*;
-    let ret = quote! {
+    quote! {
         #[macro_export]
         macro_rules! #macro_ident {
-            (@emit_flat $matcher:expr, $from:path, $to:path) => {
+            (@emit_flat $matcher:expr, ($($from:tt)*), $to:ident) => {
                 match $matcher {
                     #(for variant in &input.variants) {
-                        <$from> :: #{ &variant.ident }
+                        $($from)* :: #{ &variant.ident }
                         #(if let Fields::Named(fields) = &variant.fields) {
                             {
                                 #(for field in &fields.named) {
@@ -44,6 +44,53 @@ fn emit_macro(
                 }
 
             };
+            (@emit_unflat $self:path [$($out:tt)*] ($input:ident, $($_:tt)*)) => {
+                (match $input { $($out)* })
+            };
+            (@emit_unflat $self:path [$($out:tt)*] ($($args:tt)*) ($mac:path)[$($marg:tt)*] $($m:tt)*) => {
+                $mac! (
+                    @emit_unflat $mac [ $($out)* ] ($($args)*) @[$($marg)*] $($m)*
+                );
+            };
+            (@emit_unflat $self:path [$($out:tt)*] ($input:ident, $from:ident, $($to:tt)*) @[$name:ident, ($($typ:tt)*), $($_:tt)*] $($m:tt)*) => {
+                $self! (
+                    @emit_unflat $self
+                    [
+                        $($out)*
+                        #(for variant in &input.variants) {
+                            $from :: #{ &variant.ident }
+                            #(if let Fields::Named(fields) = &variant.fields) {
+                                {
+                                    #(for field in &fields.named) {
+                                        #{&field.ident}
+                                    }
+                                } => {return $($to)* :: $name ($($typ)* :: #{ &variant.ident }{
+                                    #(for field in &fields.named) {
+                                        #{&field.ident}
+                                    }
+                                });}
+                            }
+                            #(if let Fields::Unnamed(fields) = &variant.fields) {
+                                #(let ids = (0..fields.unnamed.len()).map(|i| Ident::new(&format!("a{}", i), Span::call_site())).collect::<Vec<_>>()){
+                                    ( #(#ids),* ) => {return $($to)* :: $name (
+                                            <$($typ)*> :: #{ &variant.ident }(#(#ids),*)
+                                    );}
+                                }
+                            }
+                            #(if let Fields::Unit = &variant.fields) {
+                                => {return $($to)* :: $name (<$($typ)*> :: #{ &variant.ident });}
+                            }
+                        }
+                    ]
+                    ($input, $from, $($to)*) $($m)*
+                );
+            };
+            (@emit_unflat $self:path [ $($out:tt)* ] ($input:ident, $from:ident, $($to:tt)*) {$($raw:tt)*} $($m:tt)*) => {
+                $self! (@emit_unflat $self [
+                    $($out)*
+                    $from :: $($raw)* => {return $($to)* :: $($raw)*}
+                ] ($input, $from, $($to)*) $($m)* );
+            };
             (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ]) => {
                 $($enum_decl)* { $($out)* }
             };
@@ -51,9 +98,9 @@ fn emit_macro(
                 $self!(@emit_enum $self {$($enum_decl)*} [$($out)* $($raw)*]  $($t)*);
             };
             (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ] ($mac:path) [$($marg:tt)*] $($t:tt)*) => {
-                $mac!(@emit_enum $self {$($enum_decl)*} [$($out)*] @[$($marg)*] $($t)*);
+                $mac!(@emit_enum $mac {$($enum_decl)*} [$($out)*] @[$($marg)*] $($t)*);
             };
-            (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ] @[$typ:ty, $($enum_type_params:ty),* $(,)?] $($t:tt)*) => {
+            (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ] @[$_:ident, ($typ:ty), $($enum_type_params:ty),* $(,)?] $($t:tt)*) => {
                 $self!(
                     @emit_enum $self { $($enum_decl)* } [
                         $($out)*
@@ -98,9 +145,7 @@ fn emit_macro(
                 );
             };
         }
-    };
-    dbg!(ret.to_string());
-    ret
+    }
 }
 
 fn emit_macro_export_in_macro_namespace(
