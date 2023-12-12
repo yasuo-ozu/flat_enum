@@ -24,6 +24,9 @@ pub enum Enum3<A, B> {
     E6,
 }
 
+#[test]
+fn test_enum3() {}
+
 mod m1 {
     use flat_enum::ToBeFlatten;
     #[derive(ToBeFlatten)]

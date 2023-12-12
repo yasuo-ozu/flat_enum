@@ -117,24 +117,6 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
         &format!("FlattenEnum_Unflat_{}_{}", &input.ident.to_string(), random),
         input.ident.span(),
     );
-    let ident_unflat_ref = Ident::new(
-        &format!(
-            "FlattenEnum_UnflatRef_{}_{}",
-            &input.ident.to_string(),
-            random
-        ),
-        input.ident.span(),
-    );
-    let ident_unflat_mut = Ident::new(
-        &format!(
-            "FlattenEnum_UnflatMut_{}_{}",
-            &input.ident.to_string(),
-            random
-        ),
-        input.ident.span(),
-    );
-    let lt = Lifetime::new("'__lt_for_ref", Span::call_site());
-
     if let Some(mac) = first_macro_path {
         quote! {
             #mac!(
@@ -160,36 +142,10 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
                     },
                 }
             }
-            #[allow(non_camel_case_types)]
-            #{ &input.vis } #{ &input.enum_token } #ident_unflat_ref <#lt, #{ &input.generics.params }> {
-                #(for variant in variants.iter()) {
-                    #(if let ParsedVariant::Normal(variant) = variant) { #variant }
-                    #(if let ParsedVariant::Flattened{attrs, ident, ty, discriminant, ..} = variant) {
-                        #(#attrs)* #ident (&#lt #ty)
-                        #(if let Some((eq, expr)) = discriminant) { #eq #expr }
-                    },
-                }
-            }
-            #[allow(non_camel_case_types)]
-            #{ &input.vis } #{ &input.enum_token } #ident_unflat_mut <#lt, #{ &input.generics.params }> {
-                #(for variant in variants.iter()) {
-                    #(if let ParsedVariant::Normal(variant) = variant) { #variant }
-                    #(if let ParsedVariant::Flattened{attrs, ident, ty, discriminant, ..} = variant) {
-                        #(#attrs)* #ident (&#lt mut #ty)
-                        #(if let Some((eq, expr)) = discriminant) { #eq #expr }
-                    },
-                }
-            }
             unsafe impl <#{ &input.generics.params }> #krate::FlattenEnum for #{ &input.ident } <#(#args),*>
             #{ &input.generics.where_clause }
             {
                 type Unflat = #ident_unflat <#(#args),*>;
-                type UnflatRef<#lt>
-                where
-                    Self: #lt =  #ident_unflat_ref <#lt #(,#args)*>;
-                type UnflatMut<#lt>
-                where
-                    Self: #lt = #ident_unflat_mut <#lt #(,#args)*>;
 
                 fn flat(this: Self::Unflat) -> Self {
                     match this {
@@ -232,19 +188,6 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
                         #out
                     );
                 }
-                fn unflat_ref<#lt>(&#lt self) -> Self::UnflatRef<#lt>
-                where
-                    Self: #lt
-                {
-                    #mac!(
-                        @emit_unflat #mac []
-                        (self, Self, Self::Unflat)
-                        #out
-                    );
-                }
-                fn unflat_mut<#lt>(&#lt mut self) -> Self::UnflatMut<#lt>
-                where
-                    Self: #lt { todo!() }
             }
         }
     } else {
@@ -255,21 +198,8 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
             #{ &input.generics.where_clause }
             {
                 type Unflat = #{ &input.ident } <#(#args),*>;
-                type UnflatRef<#lt>
-                where
-                    Self: #lt =  #{ &input.ident } <#(#args),*>;
-                type UnflatMut<#lt>
-                where
-                    Self: #lt = #{ &input.ident } <#(#args),*>;
-
                 fn flat(this: Self::Unflat) -> Self { this }
                 fn unflat(self) -> Self::Unflat { self }
-                fn unflat_ref<#lt>(&#lt self) -> Self::UnflatRef<#lt>
-                where
-                    Self: #lt { self }
-                fn unflat_mut<#lt>(&#lt self) -> Self::UnflatMut<#lt>
-                where
-                    Self: #lt { self }
             }
         }
     }

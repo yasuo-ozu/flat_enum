@@ -15,19 +15,7 @@ pub unsafe trait Leak<const N: usize, EnumTypeParams>: ToBeFlatten {
 /// Implemented with [`flat_enum`].
 pub unsafe trait FlattenEnum {
     type Unflat;
-    type UnflatRef<'a>
-    where
-        Self: 'a;
-    type UnflatMut<'a>
-    where
-        Self: 'a;
 
     fn flat(this: Self::Unflat) -> Self;
     fn unflat(self) -> Self::Unflat;
-    fn unflat_ref<'a>(&'a self) -> Self::UnflatRef<'a>
-    where
-        Self: 'a;
-    fn unflat_mut<'a>(&'a mut self) -> Self::UnflatMut<'a>
-    where
-        Self: 'a;
 }
