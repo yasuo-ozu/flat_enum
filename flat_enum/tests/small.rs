@@ -1,5 +1,4 @@
 use flat_enum::{flat_enum, ToBeFlatten};
-
 #[derive(ToBeFlatten)]
 pub enum Enum1<A> {
     E1(A),

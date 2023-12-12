@@ -234,8 +234,15 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
                 }
                 fn unflat_ref<#lt>(&#lt self) -> Self::UnflatRef<#lt>
                 where
-                    Self: #lt { todo!() }
-                fn unflat_mut<#lt>(&#lt self) -> Self::UnflatMut<#lt>
+                    Self: #lt
+                {
+                    #mac!(
+                        @emit_unflat #mac []
+                        (self, Self, Self::Unflat)
+                        #out
+                    );
+                }
+                fn unflat_mut<#lt>(&#lt mut self) -> Self::UnflatMut<#lt>
                 where
                     Self: #lt { todo!() }
             }

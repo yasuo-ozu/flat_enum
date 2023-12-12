@@ -27,7 +27,7 @@ pub unsafe trait FlattenEnum {
     fn unflat_ref<'a>(&'a self) -> Self::UnflatRef<'a>
     where
         Self: 'a;
-    fn unflat_mut<'a>(&'a self) -> Self::UnflatMut<'a>
+    fn unflat_mut<'a>(&'a mut self) -> Self::UnflatMut<'a>
     where
         Self: 'a;
 }
