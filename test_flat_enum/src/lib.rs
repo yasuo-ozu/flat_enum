@@ -1,6 +1,6 @@
-use flat_enum::ToBeFlatten;
+use flat_enum::FlatTarget;
 
-#[derive(ToBeFlatten)]
+#[derive(FlatTarget)]
 pub enum Enum6<'a, const N: usize, A> {
     E8(&'a [A; N]),
 }

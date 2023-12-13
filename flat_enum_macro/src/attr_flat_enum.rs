@@ -142,7 +142,7 @@ pub fn flat_enum(_attr: TokenStream, input: ItemEnum) -> TokenStream {
                     },
                 }
             }
-            unsafe impl <#{ &input.generics.params }> #krate::FlattenEnum for #{ &input.ident } <#(#args),*>
+            unsafe impl <#{ &input.generics.params }> #krate::FlatEnum for #{ &input.ident } <#(#args),*>
             #{ &input.generics.where_clause }
             {
                 type Unflat = #ident_unflat <#(#args),*>;

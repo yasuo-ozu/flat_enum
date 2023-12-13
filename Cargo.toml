@@ -2,6 +2,7 @@
 
 members = [
 	"flat_enum",
+	"flat_enum_macro",
 	"test_flat_enum",
 ]
 

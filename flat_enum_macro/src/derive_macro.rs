@@ -192,7 +192,7 @@ fn emit_impl(input: &ItemEnum, flat_enum: &Path, leak_dict: &HashMap<Type, usize
     };
     quote! {
         #[automatically_derived]
-        unsafe impl <#{ &generic_impl.params }> #flat_enum :: ToBeFlatten for #{ &input.ident } #arg
+        unsafe impl <#{ &generic_impl.params }> #flat_enum :: FlatTarget for #{ &input.ident } #arg
         #{ &generic_impl.where_clause }
         { }
 
@@ -223,7 +223,7 @@ fn generate_leak_dict(input: &ItemEnum) -> HashMap<Type, usize> {
     ret
 }
 
-pub fn to_be_flatten(input: ItemEnum) -> TokenStream {
+pub fn flat_target(input: ItemEnum) -> TokenStream {
     let mut flat_enum: Path = parse_quote!(::flat_enum);
     for attr in &input.attrs {
         if attr.path.is_ident("flat_enum") {

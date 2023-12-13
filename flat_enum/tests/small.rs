@@ -1,5 +1,5 @@
-use flat_enum::{flat_enum, ToBeFlatten};
-#[derive(ToBeFlatten)]
+use flat_enum::{flat_enum, FlatTarget};
+#[derive(FlatTarget)]
 pub enum Enum1<A> {
     E1(A),
     E2(),
@@ -7,7 +7,7 @@ pub enum Enum1<A> {
 }
 
 #[flat_enum]
-#[derive(ToBeFlatten)]
+#[derive(FlatTarget)]
 pub enum Enum2<A> {
     #[flatten]
     Enum1(Enum1<A>),

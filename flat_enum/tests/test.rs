@@ -1,21 +1,21 @@
-use flat_enum::{flat_enum, ToBeFlatten};
+use flat_enum::{flat_enum, FlatTarget};
 use test_flat_enum::Enum6;
 
-#[derive(ToBeFlatten)]
+#[derive(FlatTarget)]
 pub enum Enum1<A> {
     E1(A),
     E2(),
     E3(String),
 }
 
-#[derive(ToBeFlatten)]
+#[derive(FlatTarget)]
 pub enum Enum2<B> {
     E4(B),
     E5(),
 }
 
 #[flat_enum]
-#[derive(ToBeFlatten)]
+#[derive(FlatTarget)]
 pub enum Enum3<A, B> {
     #[flatten]
     MyEnum1(Enum1<A>),
@@ -28,8 +28,8 @@ pub enum Enum3<A, B> {
 fn test_enum3() {}
 
 mod m1 {
-    use flat_enum::ToBeFlatten;
-    #[derive(ToBeFlatten)]
+    use flat_enum::FlatTarget;
+    #[derive(FlatTarget)]
     pub enum Enum4<'a, const N: usize, A> {
         E7(&'a str, [A; N]),
     }
