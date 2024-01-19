@@ -1,9 +1,21 @@
+[package]
+name = "flat_enum"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+flat_enum_macro = { path = "macro", version = "0.1.0" }
+
+[dev-dependencies]
+test_flat_enum = { path = "tests/test_flat_enum", version = "0.1.0" }
+
 [workspace]
 
 members = [
-	"flat_enum",
-	"flat_enum_macro",
-	"test_flat_enum",
+	"macro",
+	"tests/test_flat_enum",
 ]
 
 resolver = "2"
