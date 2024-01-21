@@ -1,4 +1,4 @@
-pub use flat_enum_macro::{flat_enum, FlatTarget};
+pub use flat_enum_macro::{flat, into_flat, FlatTarget};
 
 /// Marker trait implemented with `#[derive(FlatTarget)]`.
 ///
@@ -13,9 +13,12 @@ pub unsafe trait Leak<const N: usize, EnumTypeParams>: FlatTarget {
 }
 
 /// Implemented with [`flat_enum`].
-pub unsafe trait FlatEnum {
-    type Unflat;
+pub unsafe trait IntoFlat {
+    type Flat: Flat<Structured = Self>;
+    fn into_flat(self) -> Self::Flat;
+    fn from_flat(_: Self::Flat) -> Self;
+}
 
-    fn flat(this: Self::Unflat) -> Self;
-    fn unflat(self) -> Self::Unflat;
+pub unsafe trait Flat {
+    type Structured: IntoFlat<Flat = Self>;
 }

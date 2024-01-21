@@ -1,4 +1,5 @@
-mod attr_flat_enum;
+mod attr_flat;
+mod attr_into_flat;
 mod derive_macro;
 mod util;
 
@@ -15,6 +16,20 @@ pub fn flat_target(input: TokenStream) -> TokenStream {
 
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn flat_enum(attr: TokenStream, input: TokenStream) -> TokenStream {
-    attr_flat_enum::flat_enum(attr.into(), parse_macro_input!(input as ItemEnum)).into()
+pub fn into_flat(attr: TokenStream, input: TokenStream) -> TokenStream {
+    attr_into_flat::into_flat(
+        parse_macro_input!(attr),
+        parse_macro_input!(input as ItemEnum),
+    )
+    .into()
+}
+
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn flat(attr: TokenStream, input: TokenStream) -> TokenStream {
+    attr_flat::flat(
+        parse_macro_input!(attr),
+        parse_macro_input!(input as ItemEnum),
+    )
+    .into()
 }

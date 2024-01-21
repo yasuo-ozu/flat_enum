@@ -26,7 +26,7 @@ fn emit_macro(
                                 #(for field in &fields.named) {
                                     #{&field.ident}
                                 }
-                            } => <$to> :: #{ &variant.ident } {
+                            } => $to :: #{ &variant.ident } {
                                 #(for field in &fields.named) {
                                     #{&field.ident}
                                 }
@@ -34,11 +34,11 @@ fn emit_macro(
                         }
                         #(if let Fields::Unnamed(fields) = &variant.fields) {
                             #(let ids = (0..fields.unnamed.len()).map(|i| Ident::new(&format!("a{}", i), Span::call_site())).collect::<Vec<_>>()){
-                                ( #(#ids),* ) => <$to> :: #{ &variant.ident } (#(#ids),*)
+                                ( #(#ids),* ) => $to :: #{ &variant.ident } (#(#ids),*)
                             }
                         }
                         #(if let Fields::Unit = &variant.fields) {
-                            => <$to> :: #{ &variant.ident }
+                            => $to :: #{ &variant.ident }
                         },
                     }
                 }

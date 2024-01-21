@@ -1,4 +1,4 @@
-use flat_enum::{flat_enum, FlatTarget};
+use flat_enum::{flat, into_flat, FlatTarget};
 use test_flat_enum::Enum6;
 
 #[derive(FlatTarget)]
@@ -14,8 +14,7 @@ pub enum Enum2<B> {
     E5(),
 }
 
-#[flat_enum]
-#[derive(FlatTarget)]
+#[into_flat(Enum3Flat<A, B>)]
 pub enum Enum3<A, B> {
     #[flatten]
     MyEnum1(Enum1<A>),
@@ -23,6 +22,11 @@ pub enum Enum3<A, B> {
     MyEnum2(Enum2<B>),
     E6,
 }
+
+// TODO: この順番強制
+#[flat(Enum3<A, B>)]
+#[derive(FlatTarget)]
+pub enum Enum3Flat<A, B> {}
 
 #[test]
 fn test_enum3() {}
@@ -36,14 +40,17 @@ mod m1 {
 }
 
 pub mod m2 {
-    use flat_enum::flat_enum;
-    #[flat_enum]
+    use flat_enum::{flat, into_flat};
+    #[into_flat(Enum5Flat<'a, A>)]
     pub enum Enum5<'a, A> {
         #[flatten]
-        MyEnum3(super::Enum3<A, A>),
+        MyEnum3(super::Enum3Flat<A, A>),
         #[flatten]
         MyEnum4(super::m1::Enum4<'a, 3, A>),
         #[flatten]
         MyEnum6(super::Enum6<'a, 4, A>),
     }
+
+    #[flat(Enum5<'a, A>)]
+    pub enum Enum5Flat<'a, A> {}
 }
