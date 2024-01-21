@@ -1,4 +1,5 @@
 use crate::util::{generic_arg_to_type, getrandom};
+use derive_syn_parse::Parse;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
 use syn::spanned::Spanned;
@@ -26,6 +27,7 @@ fn split_path_param(mut path: Path) -> (Path, Vec<Type>) {
     (path, v)
 }
 
+#[allow(unused)]
 enum ParsedVariant {
     Normal(Variant),
     Flattened {
@@ -225,8 +227,19 @@ fn emit_from_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream
     }
 }
 
-pub fn into_flat(flat_path: Path, mut input: ItemEnum) -> TokenStream {
-    let krate: Type = parse_quote!(::flat_enum);
+#[derive(Parse)]
+pub struct MacroArg {
+    flat_path: Path,
+    _at_token: Option<Token![@]>,
+    #[parse_if(_at_token.is_some())]
+    krate: Option<Path>,
+}
+
+pub fn into_flat(arg: MacroArg, mut input: ItemEnum) -> TokenStream {
+    let MacroArg {
+        flat_path, krate, ..
+    } = arg;
+    let krate = krate.unwrap_or(parse_quote!(::flat_enum));
     let (g_impl, g_type, g_where) = input.generics.split_for_impl();
     let flat_name = if flat_path.leading_colon.is_none() && flat_path.segments.len() == 1 {
         &flat_path.segments[0].ident

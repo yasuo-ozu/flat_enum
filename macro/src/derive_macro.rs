@@ -128,7 +128,6 @@ fn emit_macro(
                                     #(for field in &fields.unnamed), {
                                         #(for attrs in &field.attrs) { #{attrs} }
                                         #{&field.vis}
-
                                         <
                                             $typ
                                             as #flat_enum::Leak<

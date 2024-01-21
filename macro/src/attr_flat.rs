@@ -1,11 +1,25 @@
+use derive_syn_parse::Parse;
 use proc_macro2::TokenStream;
 use proc_macro_error::abort;
 use syn::spanned::Spanned;
 use syn::*;
 use template_quote::quote;
 
-pub fn flat(structured_path: Path, input: ItemEnum) -> TokenStream {
-    let krate: Type = parse_quote!(::flat_enum);
+#[derive(Parse)]
+pub struct MacroArg {
+    structured_path: Path,
+    _at_token: Option<Token![@]>,
+    #[parse_if(_at_token.is_some())]
+    krate: Option<Path>,
+}
+
+pub fn flat(arg: MacroArg, input: ItemEnum) -> TokenStream {
+    let MacroArg {
+        structured_path,
+        krate,
+        ..
+    } = arg;
+    let krate = krate.unwrap_or(parse_quote!(::flat_enum));
     let (g_impl, g_type, g_where) = input.generics.split_for_impl();
     let macro_name =
         if structured_path.leading_colon.is_none() && structured_path.segments.len() == 1 {
