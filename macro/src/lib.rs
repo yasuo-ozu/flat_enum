@@ -7,7 +7,6 @@ use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 use syn::{parse_macro_input, ItemEnum};
 
-/// This macro derives [`flat_enum::FlatTarget`] trait.
 #[proc_macro_error]
 #[proc_macro_derive(FlatTarget)]
 pub fn flat_target(input: TokenStream) -> TokenStream {

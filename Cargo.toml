@@ -2,11 +2,14 @@
 name = "flat_enum"
 version = "0.1.0"
 edition = "2021"
+description = "Expand nested enum into flattened enum"
+license = "MIT"
+keywords = ["macros"]
+categories = ["data-structure"]
+repository = "https://github.com/yasuo-ozu/flat_enum"
 
 [lib]
 path = "lib.rs"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 flat_enum_macro = { path = "macro", version = "0.1.0" }

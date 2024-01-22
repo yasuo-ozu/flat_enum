@@ -23,7 +23,6 @@ pub enum Enum3<A, B> {
     E6,
 }
 
-// TODO: この順番強制
 #[flat(Enum3<A, B>)]
 #[derive(FlatTarget)]
 pub enum Enum3Flat<A, B> {}
