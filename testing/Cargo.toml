@@ -1,5 +1,5 @@
 [package]
-name = "flat_enum"
+name = "test_flat_enum"
 version = "0.1.0"
 edition = "2021"
 description = "Expand nested enum into flattened enum"
@@ -7,21 +7,10 @@ license = "MIT"
 keywords = ["macros"]
 categories = ["data-structure"]
 repository = "https://github.com/yasuo-ozu/flat_enum"
-
-[features]
-testing = []
+publish = false
 
 [lib]
 path = "lib.rs"
 
-[dependencies]
-flat_enum_macro = { path = "macro", version = "0.1.0" }
-
-[workspace]
-
-members = [
-	"macro",
-	"testing",
-]
-
-resolver = "2"
+[dev-dependencies]
+flat_enum = { features = ["testing"], path = "..", version = "0.1.0" }

@@ -1,5 +1,4 @@
-use flat_enum::{flat, into_flat, FlatTarget};
-use test_flat_enum::Enum6;
+use flat_enum::{flat, into_flat, Enum6, FlatTarget};
 
 #[derive(FlatTarget)]
 pub enum Enum1<A> {

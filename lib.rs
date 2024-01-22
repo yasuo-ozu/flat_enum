@@ -95,3 +95,12 @@ pub unsafe trait IntoFlat {
 pub unsafe trait Flat {
     type Structured: IntoFlat<Flat = Self>;
 }
+
+#[cfg(feature = "testing")]
+pub mod testing {
+    use super::FlatTarget;
+    #[derive(FlatTarget)]
+    pub enum Enum6<'a, const N: usize, A> {
+        E8(&'a [A; N]),
+    }
+}
