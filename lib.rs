@@ -99,8 +99,16 @@ pub unsafe trait Flat {
 #[cfg(feature = "testing")]
 pub mod testing {
     use super::FlatTarget;
-    #[derive(FlatTarget)]
-    pub enum Enum6<'a, const N: usize, A> {
-        E8(&'a [A; N]),
+
+    macro_rules! emit_enum6 {
+        () => {
+            #[derive(FlatTarget)]
+            #[flat_enum($crate)]
+            pub enum Enum6<'a, const N: usize, A> {
+                E8(&'a [A; N]),
+            }
+        };
     }
+
+    emit_enum6!();
 }

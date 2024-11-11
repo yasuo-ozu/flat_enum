@@ -1,4 +1,4 @@
-use flat_enum::{flat, into_flat, Enum6, FlatTarget};
+use flat_enum::{flat, into_flat, testing::Enum6, FlatTarget};
 
 #[derive(FlatTarget)]
 pub enum Enum1<A> {
@@ -7,12 +7,14 @@ pub enum Enum1<A> {
     E3(String),
 }
 
+#[allow(unused)]
 #[derive(FlatTarget)]
 pub enum Enum2<B> {
     E4(B),
     E5(),
 }
 
+#[allow(unused)]
 #[into_flat(Enum3Flat<A, B>)]
 pub enum Enum3<A, B> {
     #[flatten]

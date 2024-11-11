@@ -135,18 +135,28 @@ fn emit_macro(ident: &Ident, variants: &[ParsedVariant]) -> TokenStream {
         &format!("flat_enum_module_{:x}_{}", getrandom(), ident.to_string()),
         Span::call_site(),
     );
+    let random_macro_ident = Ident::new(
+        &format!(
+            "flat_enum_macro_{:x}_{}",
+            getrandom(),
+            ident
+        ),
+        Span::call_site(),
+    );
     let inner = emit_macro_inner(variants, &quote! { $($enum_decl)* });
     quote! {
         mod #random_module_ident {
             #[macro_export]
-            macro_rules! #ident {
+            macro_rules! #random_macro_ident {
                 (@emit_enum
                     flat_enum = #{env!("CARGO_PKG_VERSION")},
                     enum_decl = { $($enum_decl:tt)* },
                 ) => { #inner };
             }
-            pub use #ident;
+            #[allow(unused)]
+            pub use #random_macro_ident as #ident;
         }
+        #[allow(unused)]
         use #random_module_ident::*;
     }
 }
@@ -200,13 +210,13 @@ fn emit_from_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream
             match this {
                 #(for variant in variants) {
                     #(if let ParsedVariant::Normal(variant) = variant) {
-                        Self :: #{ &variant.ident }
+                        #ident_flat :: #{ &variant.ident }
                         #(if let Fields::Named(fields) = &variant.fields) {
                             {
                                 #(for field in &fields.named) {
                                     #{&field.ident}
                                 }
-                            } => #ident_flat :: #{ &variant.ident } {
+                            } => Self :: #{ &variant.ident } {
                                 #(for field in &fields.named) {
                                     #{&field.ident}
                                 }
@@ -214,11 +224,11 @@ fn emit_from_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream
                         }
                         #(if let Fields::Unnamed(fields) = &variant.fields) {
                             #(let ids = (0..fields.unnamed.len()).map(|i| Ident::new(&format!("a{}", i), Span::call_site())).collect::<Vec<_>>()){
-                                ( #(#ids),* ) => #ident_flat :: #{ &variant.ident } (#(#ids),*)
+                                ( #(#ids),* ) => Self :: #{ &variant.ident } (#(#ids),*)
                             }
                         }
                         #(if let Fields::Unit = &variant.fields) {
-                            => #ident_flat:: #{ &variant.ident }
+                            => Self:: #{ &variant.ident }
                         }
                     },
                 }

@@ -12,5 +12,5 @@ publish = false
 [lib]
 path = "lib.rs"
 
-[dev-dependencies]
+[dependencies]
 flat_enum = { features = ["testing"], path = "..", version = "0.1.0" }

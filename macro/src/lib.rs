@@ -8,7 +8,7 @@ use proc_macro_error::proc_macro_error;
 use syn::{parse_macro_input, ItemEnum};
 
 #[proc_macro_error]
-#[proc_macro_derive(FlatTarget)]
+#[proc_macro_derive(FlatTarget, attributes(flat_enum))]
 pub fn flat_target(input: TokenStream) -> TokenStream {
     derive_macro::flat_target(parse_macro_input!(input as ItemEnum)).into()
 }
