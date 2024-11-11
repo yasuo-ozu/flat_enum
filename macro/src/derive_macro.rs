@@ -169,6 +169,7 @@ fn emit_macro_export_in_macro_namespace(
         Span::call_site(),
     );
     quote! {
+        #[allow(non_snake_case)]
         mod #random_module_ident {
             #{emit_macro(input, &random_macro_ident, flat_enum, leak_dict)}
             pub use #random_macro_ident as #{ &input.ident };

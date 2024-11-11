@@ -145,6 +145,7 @@ fn emit_macro(ident: &Ident, variants: &[ParsedVariant]) -> TokenStream {
     );
     let inner = emit_macro_inner(variants, &quote! { $($enum_decl)* });
     quote! {
+        #[allow(non_snake_case)]
         mod #random_module_ident {
             #[macro_export]
             macro_rules! #random_macro_ident {
@@ -275,6 +276,7 @@ pub fn into_flat(arg: MacroArg, mut input: ItemEnum) -> TokenStream {
     quote! {
         #input
         #mac_def
+        #[automatically_derived]
         unsafe impl #g_impl #krate::IntoFlat for #{&input.ident} #g_type #g_where {
             type Flat = #flat_path;
             fn into_flat(self) -> Self::Flat {

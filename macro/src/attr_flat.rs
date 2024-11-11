@@ -34,6 +34,7 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> TokenStream {
         abort!(input.span(), "Cannot specify variants");
     }
     quote! {
+        #[automatically_derived]
         unsafe impl #g_impl #krate::Flat for #{ &input.ident } #g_type #g_where {
             type Structured = #structured_path;
         }
