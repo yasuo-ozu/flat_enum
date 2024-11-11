@@ -1,4 +1,11 @@
-# About flat_enum crate
+# flat_enum crate [![Latest Version]][crates.io] [![Documentation]][docs.rs] [![GitHub Actions]][actions]
+
+[Latest Version]: https://img.shields.io/crates/v/flat_enum.svg
+[crates.io]: https://crates.io/crates/flat_enum
+[Documentation]: https://img.shields.io/docsrs/flat_enum
+[docs.rs]: https://docs.rs/flat_enum/latest/flat_enum/
+[GitHub Actions]: https://github.com/yasuo-ozu/flat_enum/actions/workflows/rust.yml/badge.svg
+[actions]: https://github.com/yasuo-ozu/flat_enum/actions/workflows/rust.yml
 
 This crate expands nesting enums. See the example:
 
