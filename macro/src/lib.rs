@@ -16,19 +16,21 @@ pub fn flat_target(input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn into_flat(attr: TokenStream, input: TokenStream) -> TokenStream {
-    attr_into_flat::into_flat(
+    let ret = attr_into_flat::into_flat(
         parse_macro_input!(attr),
         parse_macro_input!(input as ItemEnum),
-    )
+    );
+    ret
     .into()
 }
 
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn flat(attr: TokenStream, input: TokenStream) -> TokenStream {
-    attr_flat::flat(
+    let ret = attr_flat::flat(
         parse_macro_input!(attr),
         parse_macro_input!(input as ItemEnum),
-    )
+    );
+    ret
     .into()
 }

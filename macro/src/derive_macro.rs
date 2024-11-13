@@ -83,19 +83,19 @@ fn emit_macro(
                         }
                     ]
                     ($input, $from, $($to)*) $($m)*
-                );
+                )
             };
             (@emit_unflat $self:path [ $($out:tt)* ] ($input:ident, $from:ident, $($to:tt)*) {$($raw:tt)*} $($m:tt)*) => {
                 $self! (@emit_unflat $self [
                     $($out)*
-                    $from :: $($raw)* => {return $($to)* :: $($raw)*}
+                    $from :: $($raw)* => {return $($to)* :: $($raw)*;}
                 ] ($input, $from, $($to)*) $($m)* );
             };
             (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ]) => {
                 $($enum_decl)* { $($out)* }
             };
             (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ] { $($raw:tt)* } $($t:tt)*) => {
-                $self!(@emit_enum $self {$($enum_decl)*} [$($out)* $($raw)*]  $($t)*);
+                $self!(@emit_enum $self {$($enum_decl)*} [$($out)* $($raw)*,]  $($t)*);
             };
             (@emit_enum $self:path { $($enum_decl:tt)* } [ $($out:tt)* ] ($mac:path) [$($marg:tt)*] $($t:tt)*) => {
                 $mac!(@emit_enum $mac {$($enum_decl)*} [$($out)*] @[$($marg)*] $($t)*);

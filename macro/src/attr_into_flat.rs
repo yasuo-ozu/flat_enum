@@ -80,12 +80,36 @@ impl ParsedVariant {
     }
 }
 
-fn serialize_variants(variants: &[ParsedVariant]) -> (TokenStream, Option<&Path>) {
+fn serialize_variants(variants: &[ParsedVariant], is_pat: bool) -> (TokenStream, Option<&Path>) {
     let mut first_macro_path = None;
     let mut out = TokenStream::new();
     for variant in variants {
         match variant {
-            ParsedVariant::Normal(variant) => out.extend(quote! {{#variant}}),
+            ParsedVariant::Normal(variant) => {
+                match (&variant.fields, is_pat) {
+                    (Fields::Unnamed(_), true) => {
+                        out.extend(quote!{{
+                            #{&variant.ident} (
+                                #(for i in 0..variant.fields.len()), {
+                                    #{Ident::new(&format!("a{}", i), Span::call_site())}
+                                }
+                            )
+                        }});
+                    }
+                    (Fields::Named(_), true) => {
+                        out.extend(quote!{{
+                            #{&variant.ident} {
+                                #(for field in &variant.fields), {
+                                    #{&field.ident}
+                                }
+                            }
+                        }})
+                    }
+                    _ => {
+                        out.extend(quote! {{#variant}});
+                    }
+                }
+            }
             ParsedVariant::Flattened {
                 ident,
                 ty,
@@ -106,7 +130,7 @@ fn serialize_variants(variants: &[ParsedVariant]) -> (TokenStream, Option<&Path>
 }
 
 fn emit_macro_inner(variants: &[ParsedVariant], enum_decl: &TokenStream) -> TokenStream {
-    let (out, first_macro_path) = serialize_variants(variants);
+    let (out, first_macro_path) = serialize_variants(variants, false);
     if let Some(mac) = first_macro_path {
         quote! {
             #mac!(
@@ -197,7 +221,7 @@ fn emit_into_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream
 }
 
 fn emit_from_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream {
-    let (out, first_macro_path) = serialize_variants(variants);
+    let (out, first_macro_path) = serialize_variants(variants, true);
     if let Some(mac) = first_macro_path {
         quote! {
             #mac!(
