@@ -1,6 +1,6 @@
 [package]
 name = "test_flat_enum"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Expand nested enum into flattened enum"
 license = "MIT"
@@ -13,4 +13,4 @@ publish = false
 path = "lib.rs"
 
 [dependencies]
-flat_enum = { features = ["testing"], path = "..", version = "0.1.0" }
+flat_enum = { features = ["testing"], path = "..", version = "0.1.1" }
