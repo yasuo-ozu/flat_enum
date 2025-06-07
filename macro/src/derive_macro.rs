@@ -105,6 +105,8 @@ fn emit_macro(
                     @emit_enum $self { $($enum_decl)* } [
                         $($out)*
                         #(for variant in &input.variants) {
+                            //#[doc = concat!("DEBUG ATTRS: ", stringify!(#(#variant.attrs)))]
+                            #(for attrs in &variant.attrs) { #{attrs} }
                             #{ &variant.ident }
                             #(if let Named(fields) = &variant.fields) {
                                 {
