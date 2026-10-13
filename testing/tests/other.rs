@@ -14,12 +14,12 @@ pub enum EnumA<Q> {
 pub enum EnumAFlat<Q> {}
 
 #[into_flat(EnumBFlat<Q>)]
- pub enum EnumB<Q> {
-     #[flatten]
-     EnumA(EnumAFlat<Q>),
-     E4(Q, Q, Q),
-     E5(Q),
- }
+pub enum EnumB<Q> {
+    #[flatten]
+    EnumA(EnumAFlat<Q>),
+    E4(Q, Q, Q),
+    E5(Q),
+}
 
 #[flat(EnumB<Q>)]
 #[derive(Announce)]

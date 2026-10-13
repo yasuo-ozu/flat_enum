@@ -134,7 +134,7 @@ fn emit_impl(
     }
     Ok(quote! {
         #[automatically_derived]
-        unsafe impl #g_impl #krate::IntoFlat for #{&input.ident} #g_type #g_where {
+        impl #g_impl #krate::IntoFlat for #{&input.ident} #g_type #g_where {
             type Flat = #flat_path;
             fn into_flat(self) -> Self::Flat {
                 match self {

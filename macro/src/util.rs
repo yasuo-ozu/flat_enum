@@ -75,6 +75,7 @@ pub fn announce_wrapped(krate: &Path, meta: TokenStream, item: &ItemEnum) -> Tok
         #[#krate::announce::announce(
             crate = #krate::announce,
             emit_item = false,
+            docs = true,
             #meta
         )]
         #{&item.vis} mod #{&item.ident} { #item }

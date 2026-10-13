@@ -28,6 +28,34 @@ impl Parse for MacroArg {
     }
 }
 
+/// The head of the flat enum, up to its body: attributes, visibility, name, generic
+/// parameters (with their bounds) and the `where` clause.
+struct Decl {
+    attrs: Vec<Attribute>,
+    vis: Visibility,
+    enum_token: Token![enum],
+    ident: Ident,
+    generics: Generics,
+}
+
+impl Parse for Decl {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let attrs = input.call(Attribute::parse_outer)?;
+        let vis = input.parse()?;
+        let enum_token = input.parse()?;
+        let ident = input.parse()?;
+        let mut generics: Generics = input.parse()?;
+        generics.where_clause = input.parse()?;
+        Ok(Decl {
+            attrs,
+            vis,
+            enum_token,
+            ident,
+            generics,
+        })
+    }
+}
+
 /// `#[flat(S<..> @ krate)] enum F<..> {}`: implements `Flat` and starts
 /// `S! { [S!, flat_cb!] decl = <F's declaration head> }`.
 pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
@@ -59,11 +87,12 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
             #{&input.vis}
             #{&input.enum_token}
             #{&input.ident}
-            #g_type
+            #{&input.generics}
+            #{&input.generics.where_clause}
     });
     Ok(quote! {
         #[automatically_derived]
-        unsafe impl #g_impl #krate::Flat for #{ &input.ident } #g_type #g_where {
+        impl #g_impl #krate::Flat for #{ &input.ident } #g_type #g_where {
             type Structured = #structured_path;
         }
         #trampoline
@@ -85,7 +114,7 @@ pub fn flattened_idents(entry: &Entry) -> Result<Vec<Ident>> {
 /// enums' definitions (one more round) and emits the flat enum.
 pub fn flat_cb(input: Input) -> Result<TokenStream> {
     let mut rest: KvArgs = input.rest_as()?;
-    let decl = rest.tokens("decl").unwrap_or_default();
+    let decl: Decl = parse2(rest.tokens("decl").unwrap_or_default())?;
     let s_entry = input
         .entries_in_order()
         .next()
@@ -106,16 +135,26 @@ pub fn flat_cb(input: Input) -> Result<TokenStream> {
                 // The nested enum's field types, with its generic parameters
                 // replaced by the arguments of the `#[flatten]` field type.
                 let n = nested_iter.next().unwrap();
-                let mut subst = Subst::new(n, ty, args)?;
+                let mut subst = Subst::new(n, ty, args, &decl.generics)?;
                 for nv in &n.variants {
                     let fields = substituted_fields(&mut subst, &nv.fields)?;
-                    out.push(quote! { #{&nv.ident} #fields });
+                    // Only the docs: other attributes may belong to a derive of the
+                    // nested enum, which the flat enum does not have.
+                    let docs = nv.attrs.iter().filter(|a| a.path().is_ident("doc"));
+                    out.push(quote! { #(#docs)* #{&nv.ident} #fields });
                 }
             }
         }
     }
+    let Decl {
+        attrs,
+        vis,
+        enum_token,
+        ident,
+        generics,
+    } = &decl;
     Ok(quote! {
-        #decl { #(#out,)* }
+        #(#attrs)* #vis #enum_token #ident #generics #{&generics.where_clause} { #(#out,)* }
     })
 }
 
