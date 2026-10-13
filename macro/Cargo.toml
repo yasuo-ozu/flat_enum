@@ -19,4 +19,4 @@ announce = "0.1.0"
 
 [dependencies.syn]
 version = "2.0"
-features = ["full", "derive", "printing", "extra-traits"]
+features = ["full", "derive", "printing", "extra-traits", "visit-mut"]

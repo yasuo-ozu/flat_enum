@@ -1,11 +1,14 @@
-use flat_enum::{flat, into_flat, FlatTarget, IntoFlat};
-#[derive(FlatTarget, Debug, PartialEq)]
+use flat_enum::announce::Announce;
+use flat_enum::{flat, into_flat, IntoFlat};
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum1<A> {
     E1(A),
     E2(),
     E3(String),
 }
-#[derive(FlatTarget, Debug, PartialEq)]
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce)]
 pub enum Enum2<B> {
     E4(B),
     E5,
@@ -21,7 +24,8 @@ pub enum Enum3<A, B> {
     E7(u8, u8),
 }
 #[flat(Enum3<A, B>)]
-#[derive(FlatTarget, Debug, PartialEq)]
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum3Flat<A, B> {}
 #[test]
 fn roundtrip() {

@@ -1,14 +1,14 @@
-//! `Leak` indices by (variant, field) position: the same type spelled
-//! `crate::Foo` twice (announce rewrites it to `$crate::Foo` in the payload) and a repeated
-//! type. Also a second announcement of a `FlatTarget` enum: the derive's
-//! `emit_item = false` implies `marker = false`, so the `Marker` impls do not conflict.
-use flat_enum::{flat, into_flat, FlatTarget, IntoFlat};
+//! Field types are taken from the announced definition: the same type spelled `crate::Foo` twice
+//! (announce rewrites it to `$crate::Foo` in the payload) and a repeated type, in a variant with
+//! named fields.
+use flat_enum::announce::Announce;
+use flat_enum::{flat, into_flat, IntoFlat};
 
 #[derive(Debug, PartialEq)]
 pub struct Foo(pub u8);
 
-#[flat_enum::__private::announce::announce(crate = flat_enum::__private::announce, macro_name = L1Announced)]
-#[derive(FlatTarget, Debug, PartialEq)]
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce)]
 pub enum L1 {
     A(crate::Foo),
     B { x: crate::Foo, y: u8, z: u8 },
@@ -27,7 +27,7 @@ pub enum L2 {
 pub enum L2Flat {}
 
 #[test]
-fn leak_index_by_position() {
+fn crate_paths() {
     let f = L2::L1(L1::B {
         x: Foo(1),
         y: 2,

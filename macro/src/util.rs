@@ -1,25 +1,9 @@
 use announce::helper::{Cont, Entry, Gather, Input};
 use proc_macro2::{Span, TokenStream};
-use syn::punctuated::{Pair, Punctuated};
 use syn::spanned::Spanned;
+use syn::visit_mut::{self, VisitMut};
 use syn::*;
 use template_quote::quote;
-
-pub fn generics_remove_defaults(generics: &Generics) -> Generics {
-    let mut ret = generics.clone();
-    ret.params.iter_mut().for_each(|gp| match gp {
-        GenericParam::Type(tp) => {
-            tp.eq_token = None;
-            tp.default = None;
-        }
-        GenericParam::Const(cp) => {
-            cp.eq_token = None;
-            cp.default = None;
-        }
-        _ => (),
-    });
-    ret
-}
 
 pub fn ident_to_path(ident: &Ident) -> Path {
     Path {
@@ -33,62 +17,26 @@ pub fn ident_to_path(ident: &Ident) -> Path {
     }
 }
 
-pub fn generics_to_arguments(generics: &Generics) -> PathArguments {
-    let mut args = Punctuated::new();
-    for p in generics.params.pairs() {
-        let v = match p.value() {
-            GenericParam::Lifetime(lt) => GenericArgument::Lifetime(lt.lifetime.clone()),
-            GenericParam::Type(tp) => GenericArgument::Type(Type::Path(TypePath {
-                qself: None,
-                path: ident_to_path(&tp.ident),
-            })),
-            GenericParam::Const(cp) => GenericArgument::Const(Expr::Path(ExprPath {
-                attrs: Vec::new(),
-                qself: None,
-                path: ident_to_path(&cp.ident),
-            })),
-        };
-        args.push_value(v);
-        if let Pair::Punctuated(_, p) = p {
-            args.push_punct(*p)
-        }
-    }
-    PathArguments::AngleBracketed(AngleBracketedGenericArguments {
-        colon2_token: None,
-        lt_token: generics.lt_token.unwrap_or_default(),
-        args,
-        gt_token: generics.gt_token.unwrap_or_default(),
-    })
-}
-
-pub fn generic_arg_to_type(arg: GenericArgument) -> Result<Type> {
-    Ok(match arg {
-        GenericArgument::Lifetime(lt) => parse_quote!(& #lt ()),
-        GenericArgument::Type(ty) => ty,
-        GenericArgument::Const(expr) => parse_quote!([(); #expr]),
-        _ => return Err(Error::new(arg.span(), "Not supported")),
-    })
-}
-
-/// Every field of the enum in (variant, field) order: `Leak<N, _>` index `N`
-/// is the field's position here. Computed on the definition side (for the
-/// `Leak` impls) and again on the consumer side from the announce payload;
-/// both see the same cfg-evaluated item, and the index never depends on how
-/// a type is spelled (announce rewrites `crate::` in the payload).
-pub fn leak_fields(input: &ItemEnum) -> impl Iterator<Item = &Field> {
-    input.variants.iter().flat_map(|v| v.fields.iter())
-}
-
-/// The enum of an entry: announced wrapped in a same-named module (see
-/// `derive_macro::emit_trampoline`), or as a plain enum.
+/// The enum of an entry: an enum announced with `#[derive(announce::Announce)]` or
+/// `#[announce]`, or the module-wrapped copy that `#[into_flat]` announces
+/// (see [`announce_wrapped`]).
+///
+/// The types of an enum announced with a `repeater` are written through it
+/// (announce's `type_leak`), so that they resolve in the calling crate.
 pub fn enum_of(entry: &Entry) -> Result<ItemEnum> {
     let bad = |span: Span| {
         Error::new(
             span,
-            "flat_enum: #[flatten] field type must be an enum with #[derive(FlatTarget)]",
+            "flat_enum: #[flatten] field type must be an enum announced with \
+             #[derive(announce::Announce)] or #[announce]",
         )
     };
-    match entry.item()? {
+    let mut item = entry.item()?;
+    if let Some(type_leak) = entry.type_leak()? {
+        type_leak.try_apply(&mut item)?;
+        Reparse.visit_item_mut(&mut item);
+    }
+    match item {
         Item::Enum(e) => Ok(e),
         Item::Mod(ItemMod {
             content: Some((_, items)),
@@ -101,16 +49,31 @@ pub fn enum_of(entry: &Entry) -> Result<ItemEnum> {
     }
 }
 
+/// `TypeLeak` writes the types it replaces as opaque tokens. Parse them back, so that
+/// [`Subst`](crate::subst::Subst) can see the generic parameters in them.
+struct Reparse;
+
+impl VisitMut for Reparse {
+    fn visit_type_mut(&mut self, ty: &mut Type) {
+        if let Type::Verbatim(tokens) = ty {
+            if let Ok(parsed) = parse2::<Type>(tokens.clone()) {
+                *ty = parsed;
+            }
+        }
+        visit_mut::visit_type_mut(self, ty);
+    }
+}
+
 /// `#[announce(emit_item = false, ..)] <vis> mod E { enum E }`: the trampoline
 /// `E!` without emitting anything else. The module is never emitted; it only
 /// wraps the payload because announce does not run its type-context check on
-/// inline modules. That check would demand announce's own `repeater` for the
-/// field types, which flat_enum resolves through its own `Leak` impls (or
-/// re-emits in the caller's scope), and it rejects `[A; N]` outright.
+/// inline modules. The structured enum of `#[into_flat]` names the nested enums
+/// by their paths in the module of the flat enum (`Enum1<A>`), which would not
+/// resolve for another crate.
 pub fn announce_wrapped(krate: &Path, meta: TokenStream, item: &ItemEnum) -> TokenStream {
     quote! {
-        #[#krate::__private::announce::announce(
-            crate = #krate::__private::announce,
+        #[#krate::announce::announce(
+            crate = #krate::announce,
             emit_item = false,
             #meta
         )]
@@ -151,15 +114,10 @@ pub fn has_flatten(variant: &Variant) -> bool {
     variant.attrs.iter().any(attribute_is_flatten)
 }
 
-fn split_path_param(mut path: Path) -> Result<(Path, Vec<Type>)> {
+fn split_path_param(mut path: Path) -> Result<(Path, Vec<GenericArgument>)> {
     let v = if let Some(seg) = path.segments.last_mut() {
         let v = match &seg.arguments {
-            PathArguments::AngleBracketed(args) => args
-                .args
-                .iter()
-                .cloned()
-                .map(generic_arg_to_type)
-                .collect::<Result<_>>()?,
+            PathArguments::AngleBracketed(args) => args.args.iter().cloned().collect(),
             PathArguments::None => Vec::new(),
             other => return Err(Error::new(other.span(), "Not supported")),
         };
@@ -179,8 +137,8 @@ pub enum ParsedVariant {
         ty: Type,
         /// The type path without generics; also the announce macro path.
         macro_path: Path,
-        /// Generic arguments of `ty`, as types (for `Leak<N, (..)>`).
-        arg_tys: Vec<Type>,
+        /// Generic arguments of `ty`.
+        args: Vec<GenericArgument>,
     },
 }
 
@@ -193,12 +151,12 @@ impl ParsedVariant {
             if field.unnamed.len() == 1 && field.unnamed[0].attrs.is_empty() {
                 if let Type::Path(tp) = &field.unnamed[0].ty {
                     if tp.qself.is_none() {
-                        let (macro_path, arg_tys) = split_path_param(tp.path.clone())?;
+                        let (macro_path, args) = split_path_param(tp.path.clone())?;
                         return Ok(ParsedVariant::Flattened {
                             ident: variant.ident,
                             ty: field.unnamed[0].ty.clone(),
                             macro_path,
-                            arg_tys,
+                            args,
                         });
                     }
                 }

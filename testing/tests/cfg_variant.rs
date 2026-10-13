@@ -1,14 +1,17 @@
 //! `#[into_flat]` works from the cfg-evaluated enum: a cfg'd-out variant (plain or
 //! `#[flatten]`) is not part of the `IntoFlat` impl.
-use flat_enum::{flat, into_flat, FlatTarget, IntoFlat};
+use flat_enum::announce::Announce;
+use flat_enum::{flat, into_flat, IntoFlat};
 
-#[derive(FlatTarget, Debug, PartialEq)]
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce)]
 pub enum Inner {
     I1(u8),
     I2,
 }
 
-#[derive(FlatTarget, Debug, PartialEq)]
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce)]
 pub enum Gone {
     G1,
 }

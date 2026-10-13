@@ -1,8 +1,10 @@
 //! Named fields. Broken in the macro_rules baseline (missing commas in
-//! patterns, `Leak<(params), N>` argument order); fixed by the announce port.
-use flat_enum::{flat, into_flat, FlatTarget, IntoFlat};
+//! patterns, wrong argument order of the type lookup); fixed by the announce port.
+use flat_enum::announce::Announce;
+use flat_enum::{flat, into_flat, IntoFlat};
 
-#[derive(FlatTarget, Debug, PartialEq)]
+#[derive(Announce, Debug, PartialEq)]
+#[announce(crate = ::flat_enum::announce)]
 pub enum N1<A> {
     X { a: A, b: u8 },
     Y(A),

@@ -1,18 +1,11 @@
 mod attr_flat;
 mod attr_into_flat;
-mod derive_macro;
+mod subst;
 mod util;
 
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, ItemEnum};
 use util::into_ts;
-
-#[proc_macro_derive(FlatTarget, attributes(flat_enum))]
-pub fn flat_target(input: TokenStream) -> TokenStream {
-    into_ts(derive_macro::flat_target(parse_macro_input!(
-        input as ItemEnum
-    )))
-}
 
 #[proc_macro_attribute]
 pub fn into_flat(attr: TokenStream, input: TokenStream) -> TokenStream {

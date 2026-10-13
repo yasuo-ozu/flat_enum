@@ -1,4 +1,5 @@
-use crate::util::{enum_of, leak_fields, nested, parse_variants, ParsedVariant};
+use crate::subst::Subst;
+use crate::util::{enum_of, nested, parse_variants, ParsedVariant};
 use announce::helper::{Cont, ContList, Entry, Input, KvArgs};
 use proc_macro2::TokenStream;
 use syn::parse::{Parse, ParseStream};
@@ -28,7 +29,7 @@ impl Parse for MacroArg {
 }
 
 /// `#[flat(S<..> @ krate)] enum F<..> {}`: implements `Flat` and starts
-/// `S! { [S!, flat_cb!] krate = krate, decl = <F's declaration head> }`.
+/// `S! { [S!, flat_cb!] decl = <F's declaration head> }`.
 pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
     let MacroArg {
         structured_path,
@@ -53,7 +54,6 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
         Cont::bang(parse_quote!(#krate::__private::flat_cb)),
     ]);
     let trampoline = list.invoke(quote! {
-        krate = #krate,
         decl =
             #(for attr in &input.attrs) { #attr }
             #{&input.vis}
@@ -81,11 +81,10 @@ pub fn flattened_idents(entry: &Entry) -> Result<Vec<Ident>> {
     }
 }
 
-/// Callback: `[flat_cb!] S! => [..] { enum S } krate = .., decl = ..` gathers the nested
+/// Callback: `[flat_cb!] S! => [..] { enum S } decl = ..` gathers the nested
 /// enums' definitions (one more round) and emits the flat enum.
 pub fn flat_cb(input: Input) -> Result<TokenStream> {
     let mut rest: KvArgs = input.rest_as()?;
-    let krate: Path = rest.require("krate")?;
     let decl = rest.tokens("decl").unwrap_or_default();
     let s_entry = input
         .entries_in_order()
@@ -103,36 +102,13 @@ pub fn flat_cb(input: Input) -> Result<TokenStream> {
     for v in &variants {
         match v {
             ParsedVariant::Normal(v) => out.push(quote! { #v }),
-            ParsedVariant::Flattened { ty, arg_tys, .. } => {
+            ParsedVariant::Flattened { ty, args, .. } => {
+                // The nested enum's field types, with its generic parameters
+                // replaced by the arguments of the `#[flatten]` field type.
                 let n = nested_iter.next().unwrap();
-                // Field `f` has `Leak` index = its (variant, field) position;
-                // the payload's field types themselves are never used, they
-                // are resolved through `Leak` in the definer's scope.
-                let index_of = |f: &Field| leak_fields(n).position(|g| std::ptr::eq(g, f)).unwrap();
+                let mut subst = Subst::new(n, ty, args)?;
                 for nv in &n.variants {
-                    let leak = |f: &Field| {
-                        let idx = index_of(f);
-                        quote! {
-                            < #ty as #krate::Leak< {#idx}, (#(#arg_tys,)*) > >::Ty
-                        }
-                    };
-                    let fields = match &nv.fields {
-                        Fields::Named(fs) => {
-                            let fs = fs.named.iter().map(|f| {
-                                let (attrs, vis, id) = (&f.attrs, &f.vis, &f.ident);
-                                quote! { #(#attrs)* #vis #id : #{leak(f)} }
-                            });
-                            quote! { { #(#fs),* } }
-                        }
-                        Fields::Unnamed(fs) => {
-                            let fs = fs.unnamed.iter().map(|f| {
-                                let (attrs, vis) = (&f.attrs, &f.vis);
-                                quote! { #(#attrs)* #vis #{leak(f)} }
-                            });
-                            quote! { ( #(#fs),* ) }
-                        }
-                        Fields::Unit => TokenStream::new(),
-                    };
+                    let fields = substituted_fields(&mut subst, &nv.fields)?;
                     out.push(quote! { #{&nv.ident} #fields });
                 }
             }
@@ -140,5 +116,22 @@ pub fn flat_cb(input: Input) -> Result<TokenStream> {
     }
     Ok(quote! {
         #decl { #(#out,)* }
+    })
+}
+
+/// The fields of a variant of a nested enum, as the flat enum has them.
+fn substituted_fields(subst: &mut Subst, fields: &Fields) -> Result<TokenStream> {
+    let mut out = Vec::new();
+    for f in fields {
+        let (attrs, vis, ty) = (&f.attrs, &f.vis, subst.apply(&f.ty)?);
+        out.push(match &f.ident {
+            Some(id) => quote! { #(#attrs)* #vis #id : #ty },
+            None => quote! { #(#attrs)* #vis #ty },
+        });
+    }
+    Ok(match fields {
+        Fields::Named(_) => quote! { { #(#out),* } },
+        Fields::Unnamed(_) => quote! { ( #(#out),* ) },
+        Fields::Unit => TokenStream::new(),
     })
 }
