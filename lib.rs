@@ -96,6 +96,15 @@ pub unsafe trait Flat {
     type Structured: IntoFlat<Flat = Self>;
 }
 
+/// Implementation details used by the generated code. Not a stable interface.
+#[doc(hidden)]
+pub mod __private {
+    /// The announce facade; generated `#[announce]` attributes use
+    /// `crate = <flat_enum>::__private::announce`.
+    pub use announce;
+    pub use flat_enum_macro::{__flat_cb as flat_cb, __into_flat_cb as into_flat_cb};
+}
+
 #[cfg(feature = "testing")]
 pub mod testing {
     use super::FlatTarget;

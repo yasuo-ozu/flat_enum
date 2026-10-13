@@ -2,6 +2,7 @@
 name = "flat_enum"
 version = "0.1.1"
 edition = "2021"
+rust-version = "1.57"
 description = "Expand nested enum into flattened enum"
 license = "MIT"
 keywords = ["macros"]
@@ -16,6 +17,7 @@ path = "lib.rs"
 
 [dependencies]
 flat_enum_macro = { path = "macro", version = "0.1.1" }
+announce = "0.1.0"
 
 [workspace]
 
