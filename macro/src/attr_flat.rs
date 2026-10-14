@@ -114,7 +114,8 @@ pub fn flattened_idents(entry: &Entry) -> Result<Vec<Ident>> {
 }
 
 /// Callback: `[flat_cb!] S! => [..] { enum S } decl = ..` gathers the nested
-/// enums' definitions (one more round) and emits the flat enum.
+/// enums' definitions (one more round) and emits the flat enum. A nested type that is not an
+/// announced enum is reported by `#[into_flat]`'s callback; here its variants are left out.
 pub fn flat_cb(input: Input) -> Result<TokenStream> {
     let mut rest: KvArgs = input.rest_as()?;
     let decl: Decl = parse2(rest.tokens("decl").unwrap_or_default())?;
@@ -125,7 +126,7 @@ pub fn flat_cb(input: Input) -> Result<TokenStream> {
     let s_item = enum_of(s_entry)?;
     let flat_ids = flattened_idents(s_entry)?;
     let variants = parse_variants(&s_item, |v| flat_ids.contains(&v.ident))?;
-    let nested = match nested(&variants, &input)? {
+    let nested = match nested(&variants, &input) {
         Ok(nested) => nested,
         Err(fetch) => return Ok(fetch),
     };
@@ -137,7 +138,10 @@ pub fn flat_cb(input: Input) -> Result<TokenStream> {
             ParsedVariant::Flattened { ty, args, .. } => {
                 // The nested enum's field types, with its generic parameters
                 // replaced by the arguments of the `#[flatten]` field type.
-                let n = nested_iter.next().unwrap();
+                let n = match nested_iter.next().unwrap() {
+                    Ok(n) => n,
+                    Err(_) => continue,
+                };
                 let mut subst = Subst::new(n, ty, args, &decl.generics)?;
                 for nv in &n.variants {
                     let fields = substituted_fields(&mut subst, &nv.fields)?;

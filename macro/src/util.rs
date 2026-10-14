@@ -174,36 +174,56 @@ impl ParsedVariant {
     }
 }
 
+/// Pushes `error` onto the errors collected so far.
+pub fn push_error(errors: &mut Option<Error>, error: Error) {
+    match errors {
+        Some(e) => e.combine(error),
+        None => *errors = Some(error),
+    }
+}
+
 /// Variants of the structured enum. `flatten` decides which are flattened.
 pub fn parse_variants(
     input: &ItemEnum,
     flatten: impl Fn(&Variant) -> bool,
 ) -> Result<Vec<ParsedVariant>> {
-    input
-        .variants
-        .iter()
-        .map(|v| ParsedVariant::new(v.clone(), flatten(v)))
-        .collect()
+    let (variants, errors) = parse_variants_recovering(input, flatten);
+    errors.map_or(Ok(variants), Err)
 }
 
-/// The nested enums' announce payloads, one per flattened variant, in order;
-/// `Err(tokens)` fetches the missing ones and calls back.
+/// Like [`parse_variants`], but a bad `#[flatten]` variant is kept as a normal one and the
+/// errors are returned with the variants, so that the rest of the expansion still happens.
+pub fn parse_variants_recovering(
+    input: &ItemEnum,
+    flatten: impl Fn(&Variant) -> bool,
+) -> (Vec<ParsedVariant>, Option<Error>) {
+    let mut errors = None;
+    let variants = input
+        .variants
+        .iter()
+        .map(|v| {
+            ParsedVariant::new(v.clone(), flatten(v)).unwrap_or_else(|e| {
+                push_error(&mut errors, e);
+                ParsedVariant::Normal(v.clone())
+            })
+        })
+        .collect();
+    (variants, errors)
+}
+
+/// The nested enums' announce payloads, one per flattened variant, in order: `Err` for a type
+/// that is not an announced enum. `Err(tokens)` fetches the missing ones and calls back.
 pub fn nested(
     variants: &[ParsedVariant],
     input: &Input,
-) -> Result<std::result::Result<Vec<ItemEnum>, TokenStream>> {
+) -> std::result::Result<Vec<Result<ItemEnum>>, TokenStream> {
     let needed = variants
         .iter()
         .filter_map(|v| v.macro_path())
         .cloned()
         .map(Cont::bang);
-    let entries = match input.gather(needed) {
-        Gather::Ready(entries) => entries,
-        Gather::Fetch(tokens) => return Ok(Err(tokens)),
-    };
-    entries
-        .into_iter()
-        .map(enum_of)
-        .collect::<Result<_>>()
-        .map(Ok)
+    match input.gather(needed) {
+        Gather::Ready(entries) => Ok(entries.into_iter().map(enum_of).collect()),
+        Gather::Fetch(tokens) => Err(tokens),
+    }
 }

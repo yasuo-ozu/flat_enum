@@ -1,7 +1,7 @@
 use crate::attr_flat::flattened_idents;
 use crate::util::{
     announce_wrapped, bindings, enum_of, has_flatten, ident_to_path, nested, parse_variants,
-    strip_flatten, ParsedVariant,
+    parse_variants_recovering, push_error, strip_flatten, ParsedVariant,
 };
 use announce::helper::{Cont, ContList, Input, KvArgs};
 use proc_macro2::TokenStream;
@@ -35,19 +35,33 @@ impl Parse for MacroArg {
 /// - invokes `S! { [S!, into_flat_cb!] .. }`: the callback reads the
 ///   cfg-evaluated `S` from its own trampoline and gathers the nested enums'
 ///   variants for the `IntoFlat` impl.
+///
+/// A bad `#[flatten]` variant or flat path is reported on top of the normal expansion (the
+/// variant is taken as a normal one, the path by its last segment), so that `S` and `S!` are
+/// still there for `#[flat]`.
 pub fn into_flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
     let MacroArg { flat_path, krate } = arg;
     let krate = match krate {
         Some(krate) => krate,
         None => parse2(quote!(::flat_enum))?,
     };
-    if flat_path.leading_colon.is_some() || flat_path.segments.len() != 1 {
-        return Err(Error::new(
-            flat_path.span(),
-            "Should be exist in the same context",
-        ));
+    let mut errors = None;
+    let flat_path = if flat_path.leading_colon.is_some() || flat_path.segments.len() != 1 {
+        push_error(
+            &mut errors,
+            Error::new(flat_path.span(), "Should be exist in the same context"),
+        );
+        Path {
+            leading_colon: None,
+            segments: flat_path.segments.last().cloned().into_iter().collect(),
+        }
+    } else {
+        flat_path
+    };
+    let (variants, variant_errors) = parse_variants_recovering(&input, has_flatten);
+    if let Some(e) = variant_errors {
+        push_error(&mut errors, e);
     }
-    let variants = parse_variants(&input, has_flatten)?;
     let flattened: Vec<&Ident> = variants
         .iter()
         .filter_map(|v| match v {
@@ -67,6 +81,7 @@ pub fn into_flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
         Cont::bang(parse2(quote!(#krate::__private::into_flat_cb))?),
     ]);
     Ok(quote! {
+        #{errors.map(|e| e.to_compile_error())}
         #stripped
         #{announce_wrapped(&krate, quote!(meta = flatten(#(#flattened),*)), &stripped)}
         #{cb.invoke(quote! { krate = #krate, flat = #flat_path })}
@@ -76,6 +91,10 @@ pub fn into_flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
 /// Callback: `into_flat_cb! { [into_flat_cb!] S! => [..] { mod S { enum S } } ENTRY* krate = .., flat = F }`.
 /// `S` is the cfg-evaluated payload of `S`'s own trampoline (oldest entry); its
 /// flattened variants come from the META `flatten(V1, ..)`.
+///
+/// This is where a `#[flatten]` field type that is not an announced enum is reported (once:
+/// `#[flat]`'s callback leaves the variants out silently). The `IntoFlat` impl is then a stub,
+/// so that the bound of `#[flat]`'s `Flat` impl holds.
 pub fn into_flat_cb(input: Input) -> Result<TokenStream> {
     let mut rest: KvArgs = input.rest_as()?;
     let (krate, flat_path): (Path, Path) = (rest.require("krate")?, rest.require("flat")?);
@@ -86,19 +105,39 @@ pub fn into_flat_cb(input: Input) -> Result<TokenStream> {
     let item = enum_of(s_entry)?;
     let flat_ids = flattened_idents(s_entry)?;
     let variants = parse_variants(&item, |v| flat_ids.contains(&v.ident))?;
-    match nested(&variants, &input)? {
-        Ok(nested) => emit_impl(&krate, &flat_path, &item, &variants, &nested),
-        Err(fetch) => Ok(fetch),
+    let nested = match nested(&variants, &input) {
+        Ok(nested) => nested,
+        Err(fetch) => return Ok(fetch),
+    };
+    let (mut items, mut errors) = (Vec::new(), None);
+    for n in nested {
+        match n {
+            Ok(n) => items.push(n),
+            Err(e) => push_error(&mut errors, e),
+        }
     }
+    Ok(match errors {
+        None => emit_impl(&krate, &flat_path, &item, &variants, &items),
+        Some(e) => {
+            let stub = impl_with(
+                &krate,
+                &flat_path,
+                &item,
+                quote!(::core::unreachable!()),
+                quote!(let _ = this; ::core::unreachable!()),
+            );
+            quote! { #{e.to_compile_error()} #stub }
+        }
+    })
 }
+
 fn emit_impl(
     krate: &Path,
     flat_path: &Path,
     input: &ItemEnum,
     variants: &[ParsedVariant],
     nested: &[ItemEnum],
-) -> Result<TokenStream> {
-    let (g_impl, g_type, g_where) = input.generics.split_for_impl();
+) -> TokenStream {
     let flat = &flat_path.segments[0].ident;
     let mut nested_iter = nested.iter();
     let mut into_arms = Vec::new();
@@ -135,21 +174,35 @@ fn emit_impl(
             }
         }
     }
-    Ok(quote! {
+    impl_with(
+        krate,
+        flat_path,
+        input,
+        quote! { match self { #(#into_arms,)* } },
+        quote! { match this { #(#from_arms,)* } },
+    )
+}
+
+/// `impl IntoFlat for S` with the given bodies of `into_flat` and `from_flat`.
+fn impl_with(
+    krate: &Path,
+    flat_path: &Path,
+    input: &ItemEnum,
+    into_body: TokenStream,
+    from_body: TokenStream,
+) -> TokenStream {
+    let (g_impl, g_type, g_where) = input.generics.split_for_impl();
+    quote! {
         #[automatically_derived]
         impl #g_impl #krate::IntoFlat for #{&input.ident} #g_type #g_where {
             type Flat = #flat_path;
             fn into_flat(self) -> Self::Flat {
-                match self {
-                    #(#into_arms,)*
-                }
+                #into_body
             }
 
             fn from_flat(this: Self::Flat) -> Self {
-                match this {
-                    #(#from_arms,)*
-                }
+                #from_body
             }
         }
-    })
+    }
 }

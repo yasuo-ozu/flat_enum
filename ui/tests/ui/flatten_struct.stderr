@@ -1,0 +1,12 @@
+error: flat_enum: #[flatten] field type must be an enum announced with #[derive(announce::Announce)] or #[announce]
+  --> tests/ui/flatten_struct.rs:9:1
+   |
+ 9 | / pub struct NotEnum {
+10 | |     pub x: u8,
+11 | | }
+   | |_^
+...
+19 |   #[into_flat(OuterFlat)]
+   |   ----------------------- in this attribute macro expansion
+   |
+   = note: this error originates in the macro `NotEnum` which comes from the expansion of the attribute macro `into_flat` (in Nightly builds, run with -Z macro-backtrace for more info)
