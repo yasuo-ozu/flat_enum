@@ -21,8 +21,6 @@ path = "lib.rs"
 name = "repeater"
 required-features = ["repeater"]
 
-[dependencies]
-flat_enum = { features = ["testing"], path = "..", version = "0.2.0" }
-
 [dev-dependencies]
+flat_enum = { features = ["testing"], path = "..", version = "0.2.0" }
 test_flat_enum_helper = { path = "helper" }

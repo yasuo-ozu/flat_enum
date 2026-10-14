@@ -37,6 +37,14 @@ jobs:
     - uses: actions/checkout@v4
     - run: cargo fmt --all --check
 
+  clippy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - run: cargo clippy --workspace --all-targets -- -D warnings
+
   # rust-version is 1.57. cargo 1.57 can read neither the lockfile nor the sparse index that
   # current cargo writes and uses, so the dependencies are resolved and vendored by the
   # stable cargo (to the newest versions that the MSRV allows), and 1.57 builds offline.
