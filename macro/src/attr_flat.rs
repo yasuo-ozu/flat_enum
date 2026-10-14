@@ -1,7 +1,5 @@
 use crate::subst::Subst;
-use crate::util::{
-    default_krate, enum_of, ident_to_path, nested, parse_variants, private_path, ParsedVariant,
-};
+use crate::util::{enum_of, ident_to_path, nested, parse_variants, ParsedVariant};
 use announce::helper::{Cont, ContList, Entry, Input, KvArgs};
 use proc_macro2::TokenStream;
 use syn::parse::{Parse, ParseStream};
@@ -65,7 +63,10 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
         structured_path,
         krate,
     } = arg;
-    let krate = krate.unwrap_or_else(default_krate);
+    let krate = match krate {
+        Some(krate) => krate,
+        None => parse2(quote!(::flat_enum))?,
+    };
     let (g_impl, g_type, g_where) = input.generics.split_for_impl();
     let macro_name =
         if structured_path.leading_colon.is_none() && structured_path.segments.len() == 1 {
@@ -81,7 +82,7 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
     }
     let list = ContList(vec![
         Cont::bang(ident_to_path(macro_name)),
-        Cont::bang(private_path(&krate, "flat_cb")),
+        Cont::bang(parse2(quote!(#krate::__private::flat_cb))?),
     ]);
     let trampoline = list.invoke(quote! {
         decl =

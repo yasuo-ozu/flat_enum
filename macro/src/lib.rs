@@ -5,22 +5,25 @@ mod util;
 
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, ItemEnum};
-use util::into_ts;
 
 #[proc_macro_attribute]
 pub fn into_flat(attr: TokenStream, input: TokenStream) -> TokenStream {
-    into_ts(attr_into_flat::into_flat(
+    attr_into_flat::into_flat(
         parse_macro_input!(attr),
         parse_macro_input!(input as ItemEnum),
-    ))
+    )
+    .unwrap_or_else(|e| e.to_compile_error())
+    .into()
 }
 
 #[proc_macro_attribute]
 pub fn flat(attr: TokenStream, input: TokenStream) -> TokenStream {
-    into_ts(attr_flat::flat(
+    attr_flat::flat(
         parse_macro_input!(attr),
         parse_macro_input!(input as ItemEnum),
-    ))
+    )
+    .unwrap_or_else(|e| e.to_compile_error())
+    .into()
 }
 
 announce::helper::callback! {
