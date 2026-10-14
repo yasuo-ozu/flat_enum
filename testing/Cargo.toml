@@ -23,3 +23,6 @@ required-features = ["repeater"]
 
 [dependencies]
 flat_enum = { features = ["testing"], path = "..", version = "0.2.0" }
+
+[dev-dependencies]
+test_flat_enum_helper = { path = "helper" }

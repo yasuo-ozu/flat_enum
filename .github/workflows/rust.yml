@@ -17,8 +17,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --workspace --verbose
     - run: cargo test --manifest-path=testing/Cargo.toml
+    - name: Install nightly Rust (for the UI tests)
+      run: rustup toolchain install nightly --profile minimal
+    - name: Run the UI tests
+      # ui/ is a separate package, left out of the workspace and of the MSRV job: trybuild
+      # needs a newer Rust than 1.57. It compares the compiler output with the snapshots in
+      # ui/tests/ui, which were recorded with a nightly rustc; other versions word some errors
+      # differently.
+      working-directory: ui
+      run: cargo +nightly test --verbose
 
   fmt:
 

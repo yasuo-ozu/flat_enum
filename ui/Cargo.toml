@@ -1,0 +1,17 @@
+# Compile-fail tests of the errors that flat_enum reports. Kept outside the main workspace
+# because trybuild needs a newer rustc than flat_enum's MSRV (1.57). Run with
+# `cargo +nightly test` in this directory: the snapshots in tests/ui were recorded with a
+# nightly rustc, and other versions word some errors differently.
+[package]
+name = "flat_enum-test-ui"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+flat_enum = { path = ".." }
+
+[dev-dependencies]
+trybuild = "1"

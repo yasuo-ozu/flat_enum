@@ -114,9 +114,14 @@ pub use flat_enum_macro::into_flat;
 /// defined: write `crate::..` and `::krate::..` paths, add `allow_std_prelude = true` for `String`,
 /// `Vec<..>` and the like, or give announce a `repeater` for the types of the defining crate
 /// (`#[announce(repeater = crate::Repeater)]`). The traits in the bounds of the generic
-/// parameters are absolute paths as well (`T: crate::Tr`, `F: ::core::ops::Fn(u8)`), and
-/// `T::Assoc` in a field is allowed when `T` has exactly one trait bound (otherwise write
-/// `<T as Trait>::Assoc`).
+/// parameters are absolute paths as well (`T: crate::Tr`, `F: ::core::ops::Fn(u8)`).
+///
+/// `T::Assoc` in a field becomes `P::Assoc` when the argument for `T` is a generic parameter
+/// `P` of the flat enum, and `<Arg as Bound>::Assoc` for another argument `Arg` when `T` has
+/// exactly one trait bound. With a concrete argument `Bound` has to declare `Assoc` itself, not
+/// a supertrait of it; and when `T` has no bound or several, a higher-ranked one or an
+/// `Fn(..)` one, flat_enum reports an error. In those cases write `<T as Trait>::Assoc` in the
+/// definition.
 ///
 /// If a `#[flatten]` field type is not announced, rustc reports ``cannot find macro `E` ``;
 /// add the derive to `E`.

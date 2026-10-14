@@ -1,0 +1,11 @@
+[package]
+name = "test_flat_enum_helper"
+version = "0.2.0"
+edition = "2021"
+description = "A derive macro with a helper attribute, for the tests of flat_enum"
+license = "MIT"
+publish = false
+
+[lib]
+path = "lib.rs"
+proc-macro = true

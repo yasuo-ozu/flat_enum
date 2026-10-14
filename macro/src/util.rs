@@ -17,6 +17,30 @@ pub fn ident_to_path(ident: &Ident) -> Path {
     }
 }
 
+/// `::flat_enum`, the crate that the generated code names unless `@ krate` says otherwise.
+pub fn default_krate() -> Path {
+    Path {
+        leading_colon: Some(Default::default()),
+        segments: Some(PathSegment {
+            ident: Ident::new("flat_enum", Span::call_site()),
+            arguments: PathArguments::None,
+        })
+        .into_iter()
+        .collect(),
+    }
+}
+
+/// `krate::__private::name`. Built from the parts, not parsed: `krate` is written by the
+/// user and the macros never panic on it.
+pub fn private_path(krate: &Path, name: &str) -> Path {
+    let mut path = krate.clone();
+    for ident in &["__private", name] {
+        path.segments
+            .push(PathSegment::from(Ident::new(ident, Span::call_site())));
+    }
+    path
+}
+
 /// The enum of an entry: an enum announced with `#[derive(announce::Announce)]` or
 /// `#[announce]`, or the module-wrapped copy that `#[into_flat]` announces
 /// (see [`announce_wrapped`]).

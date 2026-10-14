@@ -22,9 +22,11 @@ pub struct Subst {
     /// The const parameters, as the argument was written: a `3`, a `{ N + 1 }`, or
     /// a path (which syn parses as a type).
     consts: HashMap<Ident, GenericArgument>,
-    /// The only trait bound of each type parameter (`None` when it has none, several, or
-    /// one that cannot be named outside the definition), to resolve `T::Assoc`.
-    bounds: HashMap<Ident, Option<Path>>,
+    /// The trait bounds of each type parameter, to resolve `T::Assoc`.
+    bounds: HashMap<Ident, Bounds>,
+    /// The type parameters of the flat enum: an argument that is one of them is written
+    /// as it is in `Arg::Assoc`, and its own bounds resolve the associated type.
+    flat_params: HashSet<Ident>,
     /// The lifetimes that a binder (`for<'b>`) must not take: those that the replacements
     /// mention and the lifetimes of the flat enum.
     taken: HashSet<String>,
@@ -56,6 +58,7 @@ impl Subst {
             types: HashMap::new(),
             consts: HashMap::new(),
             bounds: sole_bounds(&nested.generics),
+            flat_params: flat.type_params().map(|p| p.ident.clone()).collect(),
             taken: taken.0,
             binders: Vec::new(),
             error: None,
@@ -120,7 +123,11 @@ impl Subst {
                 ),
             ));
         }
-        Ok(s)
+        // A default can have an error of its own (`T::Assoc` without a bound).
+        match s.error.take() {
+            Some(e) => Err(e),
+            None => Ok(s),
+        }
     }
 
     pub fn apply(&mut self, ty: &Type) -> Result<Type> {
@@ -149,17 +156,75 @@ impl Subst {
         Some((repl, rest))
     }
 
-    /// `<repl as Bound>::rest` for `T::rest`, when `T` has just one trait bound; otherwise
-    /// `None`, because `T::rest` is resolved through the bounds of `T` in the definition.
-    fn qualified(
+    /// `T::rest` for the replacement `repl` of `T`, as a qualified self type and a path.
+    ///
+    /// - `Arg::rest` when `Arg` is a type parameter of the flat enum: its bounds there are
+    ///   the bounds of `T` (the structured enum needs them for `E<Arg>` to be well-formed),
+    ///   and they resolve `rest` whichever trait declares it, a supertrait included;
+    /// - `<Arg as Bound>::rest` when `T` has exactly one trait bound, which then has to
+    ///   declare `rest` itself;
+    /// - otherwise the message of an error: `T::rest` is resolved through the bounds of `T`
+    ///   in the definition, which `<Arg>::rest` does not have.
+    fn assoc_path(
         &mut self,
         param: &Ident,
         repl: &Type,
         rest: &Punctuated<PathSegment, Token![::]>,
-    ) -> Option<Type> {
-        let mut bound = self.bounds.get(param)?.clone()?;
-        self.visit_path_mut(&mut bound);
-        Some(parse_quote!(<#repl as #bound>::#rest))
+    ) -> std::result::Result<(Option<QSelf>, Path), String> {
+        let mut path = Path {
+            leading_colon: None,
+            segments: Punctuated::new(),
+        };
+        if let Some(arg) = bare_ident(repl) {
+            if self.flat_params.contains(arg) {
+                path.segments.push(PathSegment::from(arg.clone()));
+                path.segments.extend(rest.iter().cloned());
+                return Ok((None, path));
+            }
+        }
+        let why = match self.bounds.get(param) {
+            Some(Bounds::One(bound)) => {
+                let mut bound = bound.clone();
+                self.visit_path_mut(&mut bound);
+                path.leading_colon = bound.leading_colon;
+                path.segments = bound.segments;
+                let position = path.segments.len();
+                path.segments.extend(rest.iter().cloned());
+                return Ok((Some(qself(repl, position, true)), path));
+            }
+            Some(Bounds::Several) => "has several trait bounds, and flat_enum cannot tell which \
+                                      of them declares it"
+                .to_string(),
+            Some(Bounds::HigherRanked) => "has a higher-ranked trait bound".to_string(),
+            Some(Bounds::Parenthesized) => "has a bound with parenthesized arguments \
+                                            (`Fn(..) -> ..`), which cannot be named in \
+                                            `<.. as Trait>`"
+                .to_string(),
+            Some(Bounds::None) | None => "has no trait bound to take the trait from".to_string(),
+        };
+        let assoc = rest
+            .first()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_default();
+        Err(format!(
+            "flat_enum: write `<{p} as Trait>::{a}` instead of `{p}::{a}` in a flattened \
+             enum: `{p}` {why}",
+            p = param,
+            a = assoc,
+            why = why
+        ))
+    }
+
+    /// `<repl>::rest` for `Self::rest`.
+    fn self_assoc(
+        repl: &Type,
+        rest: &Punctuated<PathSegment, Token![::]>,
+    ) -> (Option<QSelf>, Path) {
+        let path = Path {
+            leading_colon: Some(Default::default()),
+            segments: rest.clone(),
+        };
+        (Some(qself(repl, 0, false)), path)
     }
 
     /// Enters the scope of a `for<'b>` binder. A lifetime of the binder that a replacement
@@ -226,22 +291,55 @@ impl<'ast> Visit<'ast> for Lifetimes {
     }
 }
 
-/// For each type parameter, its only trait bound, in the parameter list or the `where`
-/// clause. `None` when it has no trait bound, several (`T::Assoc` could belong to any of
-/// them), or one that is higher-ranked (`for<'a> Tr<'a>`).
-fn sole_bounds(generics: &Generics) -> HashMap<Ident, Option<Path>> {
-    fn add(bounds: &mut Vec<Option<Path>>, bound: &TypeParamBound, ranked: bool) {
+/// The trait bounds of a type parameter (those of `Sized` and `?Sized` left out), to tell
+/// which trait `T::Assoc` belongs to.
+enum Bounds {
+    None,
+    /// Exactly one trait (the same bound written twice counts once), without its
+    /// associated type constraints.
+    One(Path),
+    Several,
+    /// `for<'a> Tr<'a>`, which `<Arg as Tr<'a>>` cannot express.
+    HigherRanked,
+    /// `Fn(u8) -> R`. The associated type of such a bound belongs to a supertrait
+    /// (`FnOnce::Output`), and the parenthesized sugar cannot be written in `<.. as ..>`.
+    Parenthesized,
+}
+
+/// One trait bound of a type parameter, as written (apart from its constraints).
+#[derive(PartialEq)]
+struct Bound {
+    path: Path,
+    ranked: bool,
+}
+
+fn is_sized(path: &Path) -> bool {
+    let names: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    path.segments.iter().all(|s| s.arguments.is_none())
+        && matches!(
+            names[..],
+            ["Sized"] | ["core", "marker", "Sized"] | ["std", "marker", "Sized"]
+        )
+}
+
+/// For each type parameter, its trait bounds, in the parameter list and the `where` clause.
+fn sole_bounds(generics: &Generics) -> HashMap<Ident, Bounds> {
+    fn add(bounds: &mut Vec<Bound>, bound: &TypeParamBound, ranked: bool) {
         if let TypeParamBound::Trait(t) = bound {
-            if !matches!(t.modifier, TraitBoundModifier::Maybe(_)) {
-                bounds.push(if t.lifetimes.is_none() && !ranked {
-                    Some(without_constraints(&t.path))
-                } else {
-                    None
-                });
+            if matches!(t.modifier, TraitBoundModifier::Maybe(_)) || is_sized(&t.path) {
+                return;
+            }
+            let bound = Bound {
+                path: without_constraints(&t.path),
+                ranked: ranked || t.lifetimes.is_some(),
+            };
+            if !bounds.contains(&bound) {
+                bounds.push(bound);
             }
         }
     }
-    let mut all: HashMap<Ident, Vec<Option<Path>>> = HashMap::new();
+    let mut all: HashMap<Ident, Vec<Bound>> = HashMap::new();
     for param in generics.type_params() {
         let bounds = all.entry(param.ident.clone()).or_default();
         param.bounds.iter().for_each(|b| add(bounds, b, false));
@@ -258,13 +356,50 @@ fn sole_bounds(generics: &Generics) -> HashMap<Ident, Option<Path>> {
     }
     all.into_iter()
         .map(|(ident, mut bounds)| {
-            let sole = match bounds.len() {
-                1 => bounds.pop().unwrap(),
-                _ => None,
+            let sole = match bounds.pop() {
+                None => Bounds::None,
+                Some(_) if !bounds.is_empty() => Bounds::Several,
+                Some(Bound { ranked: true, .. }) => Bounds::HigherRanked,
+                Some(Bound { path, .. }) => {
+                    if path
+                        .segments
+                        .iter()
+                        .any(|s| matches!(s.arguments, PathArguments::Parenthesized(_)))
+                    {
+                        Bounds::Parenthesized
+                    } else {
+                        Bounds::One(path)
+                    }
+                }
             };
             (ident, sole)
         })
         .collect()
+}
+
+/// The identifier that `ty` is, when it is just a name.
+fn bare_ident(ty: &Type) -> Option<&Ident> {
+    match ty {
+        Type::Path(tp) if tp.qself.is_none() => tp.path.get_ident(),
+        Type::Group(g) => bare_ident(&g.elem),
+        Type::Paren(p) => bare_ident(&p.elem),
+        _ => None,
+    }
+}
+
+/// `<ty as` / `<ty>` of a qualified path whose trait takes `position` segments.
+fn qself(ty: &Type, position: usize, with_trait: bool) -> QSelf {
+    QSelf {
+        lt_token: Default::default(),
+        ty: Box::new(ty.clone()),
+        position,
+        as_token: if with_trait {
+            Some(Default::default())
+        } else {
+            None
+        },
+        gt_token: Default::default(),
+    }
 }
 
 /// `Iterator<Item = u8>` as `Iterator`: a trait in `<T as Trait>` takes no constraints.
@@ -336,27 +471,22 @@ impl VisitMut for Subst {
             } else if tp.qself.is_none() {
                 if let Some((repl, rest)) = self.split_assoc(&tp.path) {
                     let first = tp.path.segments[0].ident.clone();
-                    if first == "Self" {
-                        *ty = parse_quote!(<#repl>::#rest);
-                        return;
+                    let assoc = if first == "Self" {
+                        Ok(Self::self_assoc(&repl, &rest))
+                    } else {
+                        // `T::Item` is resolved through the bounds of `T` in the
+                        // definition, which `<Arg>::Item` does not have.
+                        self.assoc_path(&first, &repl, &rest)
+                    };
+                    match assoc {
+                        Ok((qself, path)) => {
+                            *ty = Type::Path(TypePath { qself, path });
+                        }
+                        Err(message) => {
+                            self.error
+                                .get_or_insert_with(|| Error::new_spanned(&*tp, message));
+                        }
                     }
-                    // `T::Item` is resolved through the bounds of `T` in the definition,
-                    // which `<Arg>::Item` does not have.
-                    if let Some(qualified) = self.qualified(&first, &repl, &rest) {
-                        *ty = qualified;
-                        return;
-                    }
-                    self.error.get_or_insert_with(|| {
-                        Error::new_spanned(
-                            &tp,
-                            format!(
-                                "flat_enum: write an associated type of a generic parameter as \
-                                 `<{} as Trait>::Assoc` in a flattened enum (`{}` has no single \
-                                 trait bound to take the trait from)",
-                                first, first
-                            ),
-                        )
-                    });
                     return;
                 }
             }
@@ -372,8 +502,29 @@ impl VisitMut for Subst {
                     return;
                 }
             } else if ep.qself.is_none() {
+                // `T::LEN` or `Self::LEN`, as a type is resolved. (On stable Rust a
+                // generic parameter cannot be used in a constant expression, so this is
+                // reached for `Self` and with `generic_const_exprs`.)
                 if let Some((repl, rest)) = self.split_assoc(&ep.path) {
-                    *expr = parse_quote!(<#repl>::#rest);
+                    let first = ep.path.segments[0].ident.clone();
+                    let assoc = if first == "Self" {
+                        Ok(Self::self_assoc(&repl, &rest))
+                    } else {
+                        self.assoc_path(&first, &repl, &rest)
+                    };
+                    match assoc {
+                        Ok((qself, path)) => {
+                            *expr = Expr::Path(ExprPath {
+                                attrs: ep.attrs.clone(),
+                                qself,
+                                path,
+                            });
+                        }
+                        Err(message) => {
+                            self.error
+                                .get_or_insert_with(|| Error::new_spanned(&*ep, message));
+                        }
+                    }
                     return;
                 }
             }
@@ -392,5 +543,173 @@ impl VisitMut for Subst {
             }
         }
         visit_mut::visit_generic_argument_mut(self, arg);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use template_quote::quote;
+
+    /// `field` of the enum `nested`, flattened as `ty` into an enum with the generics `flat`.
+    fn run(nested: &str, field: &str, flat: &str, ty: &str) -> std::result::Result<String, String> {
+        let nested: ItemEnum = parse_str(nested).unwrap();
+        let self_ty: Type = parse_str(ty).unwrap();
+        let args: Vec<GenericArgument> = match &self_ty {
+            Type::Path(tp) => match &tp.path.segments.last().unwrap().arguments {
+                PathArguments::AngleBracketed(a) => a.args.iter().cloned().collect(),
+                _ => Vec::new(),
+            },
+            _ => unreachable!(),
+        };
+        let flat: Generics = parse_str(flat).unwrap();
+        let field: Type = parse_str(field).unwrap();
+        Subst::new(&nested, &self_ty, &args, &flat)
+            .and_then(|mut s| s.apply(&field))
+            .map(|t| quote!(#t).to_string().replace(' ', ""))
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn fn_family_bound_is_an_error() {
+        // Used to panic on the `<_ as ::core::ops::Fn(u8) -> R>` it built.
+        let err = run(
+            "enum E<F: ::core::ops::Fn(u8) -> R, R> { V(F::Output, F) }",
+            "F::Output",
+            "<>",
+            "E<fn(u8) -> u32, u32>",
+        )
+        .unwrap_err();
+        assert!(err.contains("parenthesized"), "{}", err);
+        assert!(err.contains("`<F as Trait>::Output`"), "{}", err);
+    }
+
+    #[test]
+    fn fn_family_bound_with_a_parameter_of_the_flat_enum() {
+        // The flat enum's own bound resolves `Output` (declared by `FnOnce`).
+        let ok = run(
+            "enum E<F: ::core::ops::Fn(u8) -> R, R> { V(F::Output, F) }",
+            "F::Output",
+            "<G: ::core::ops::Fn(u8) -> S, S>",
+            "E<G, S>",
+        );
+        assert_eq!(ok.unwrap(), "G::Output");
+    }
+
+    #[test]
+    fn supertrait_associated_type() {
+        let nested = "enum E<T: ::probe::Sub> { V(T::Assoc) }";
+        // A parameter of the flat enum: its bounds find the supertrait's `Assoc`.
+        let ok = run(nested, "T::Assoc", "<P: ::probe::Sub>", "E<P>").unwrap();
+        assert_eq!(ok, "P::Assoc");
+        // A concrete type: the bound has to declare `Assoc` itself.
+        let ok = run(nested, "T::Assoc", "<>", "E<u8>").unwrap();
+        assert_eq!(ok, "<u8as::probe::Sub>::Assoc");
+        // A parameter of the flat enum that is wrapped is not "bare".
+        let ok = run(nested, "T::Assoc", "<P: ::probe::Sub>", "E<Vec<P>>").unwrap();
+        assert_eq!(ok, "<Vec<P>as::probe::Sub>::Assoc");
+        // Not a parameter of the flat enum.
+        let ok = run(nested, "T::Assoc", "<Q>", "E<P>").unwrap();
+        assert_eq!(ok, "<Pas::probe::Sub>::Assoc");
+    }
+
+    #[test]
+    fn parameter_of_the_flat_enum_needs_no_sole_bound() {
+        for nested in &[
+            "enum E<T> { V(T::A) }",
+            "enum E<T: ::probe::Tr + ::probe::Other> { V(T::A) }",
+            "enum E<T> where for<'a> T: ::probe::Lt<'a> { V(T::A) }",
+        ] {
+            let ok = run(nested, "T::A", "<P: ::probe::Tr>", "E<P>").unwrap();
+            assert_eq!(ok, "P::A", "{}", nested);
+        }
+    }
+
+    #[test]
+    fn sized_is_not_a_bound() {
+        for nested in &[
+            "enum E<T: Sized + ::probe::Tr> { V(T::A) }",
+            "enum E<T: ::probe::Tr + ::core::marker::Sized> { V(T::A) }",
+            "enum E<T: ::probe::Tr + ?Sized> { V(T::A) }",
+            "enum E<T: ::probe::Tr> where T: ::std::marker::Sized { V(T::A) }",
+        ] {
+            let ok = run(nested, "T::A", "<>", "E<u8>").unwrap();
+            assert_eq!(ok, "<u8as::probe::Tr>::A", "{}", nested);
+        }
+    }
+
+    #[test]
+    fn the_same_bound_twice_is_one_bound() {
+        for nested in &[
+            "enum E<T: ::probe::Tr> where T: ::probe::Tr { V(T::A) }",
+            "enum E<T: ::probe::Tr + ::probe::Tr> { V(T::A) }",
+            "enum E<T: ::probe::Tr<Item = u8>> where T: ::probe::Tr { V(T::A) }",
+        ] {
+            let ok = run(nested, "T::A", "<>", "E<u8>").unwrap();
+            assert_eq!(ok, "<u8as::probe::Tr>::A", "{}", nested);
+        }
+        // Different arguments are different traits.
+        let err = run(
+            "enum E<T: ::probe::Conv<u8> + ::probe::Conv<u16>> { V(T::Out) }",
+            "T::Out",
+            "<>",
+            "E<u8>",
+        )
+        .unwrap_err();
+        assert!(err.contains("several trait bounds"), "{}", err);
+    }
+
+    #[test]
+    fn higher_ranked_bound_message() {
+        for nested in &[
+            "enum E<T: for<'a> ::probe::Lt<'a>> { V(T::A) }",
+            "enum E<T> where for<'a> T: ::probe::Lt<'a> { V(T::A) }",
+        ] {
+            let err = run(nested, "T::A", "<>", "E<u8>").unwrap_err();
+            assert!(err.contains("higher-ranked trait bound"), "{}", err);
+            assert!(err.contains("`<T as Trait>::A`"), "{}", err);
+        }
+    }
+
+    #[test]
+    fn no_bound_message() {
+        let err = run("enum E<T> { V(T::A) }", "T::A", "<>", "E<u8>").unwrap_err();
+        assert!(err.contains("no trait bound"), "{}", err);
+    }
+
+    #[test]
+    fn associated_constant_is_qualified_like_a_type() {
+        let ok = run(
+            "enum E<T: ::probe::Tr> { V([u8; T::LEN]) }",
+            "[u8; T::LEN]",
+            "<>",
+            "E<u8>",
+        )
+        .unwrap();
+        assert_eq!(ok, "[u8;<u8as::probe::Tr>::LEN]");
+        let ok = run(
+            "enum E<T: ::probe::Tr> { V([u8; T::LEN]) }",
+            "[u8; T::LEN]",
+            "<P: ::probe::Tr>",
+            "E<P>",
+        )
+        .unwrap();
+        assert_eq!(ok, "[u8;P::LEN]");
+        let ok = run(
+            "enum E { V([u8; Self::LEN]) }",
+            "[u8; Self::LEN]",
+            "<>",
+            "E",
+        )
+        .unwrap();
+        assert_eq!(ok, "[u8;<E>::LEN]");
+        let err = run(
+            "enum E<T: ::probe::A + ::probe::B> { V([u8; T::LEN]) }",
+            "[u8; T::LEN]",
+            "<>",
+            "E<u8>",
+        )
+        .unwrap_err();
+        assert!(err.contains("several trait bounds"), "{}", err);
     }
 }

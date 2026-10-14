@@ -1,7 +1,7 @@
 use crate::attr_flat::flattened_idents;
 use crate::util::{
-    announce_wrapped, bindings, enum_of, has_flatten, ident_to_path, nested, parse_variants,
-    strip_flatten, ParsedVariant,
+    announce_wrapped, bindings, default_krate, enum_of, has_flatten, ident_to_path, nested,
+    parse_variants, private_path, strip_flatten, ParsedVariant,
 };
 use announce::helper::{Cont, ContList, Input, KvArgs};
 use proc_macro2::TokenStream;
@@ -37,7 +37,7 @@ impl Parse for MacroArg {
 ///   variants for the `IntoFlat` impl.
 pub fn into_flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
     let MacroArg { flat_path, krate } = arg;
-    let krate = krate.unwrap_or(parse_quote!(::flat_enum));
+    let krate = krate.unwrap_or_else(default_krate);
     if flat_path.leading_colon.is_some() || flat_path.segments.len() != 1 {
         return Err(Error::new(
             flat_path.span(),
@@ -61,7 +61,7 @@ pub fn into_flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
 
     let cb = ContList(vec![
         Cont::bang(ident_to_path(&input.ident)),
-        Cont::bang(parse_quote!(#krate::__private::into_flat_cb)),
+        Cont::bang(private_path(&krate, "into_flat_cb")),
     ]);
     Ok(quote! {
         #stripped

@@ -15,7 +15,7 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 template-quote = "0.4"
-announce = "0.1.0"
+announce = "0.1.1"
 
 [dependencies.syn]
 version = "2.0"

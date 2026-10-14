@@ -338,3 +338,132 @@ fn bound_lifetime_does_not_shadow_the_flat_enum() {
         HigherStaticFlat::Other(&1)
     ));
 }
+
+// `T::Assoc` where `Assoc` is declared by a supertrait of the bound of `T`. The trait that
+// declares it is not known, so a type of the flat enum (`P`, with its own bounds) is written
+// as it is: `P::Assoc`.
+pub trait Super {
+    type Assoc;
+}
+pub trait Sub: Super {}
+impl Super for u8 {
+    type Assoc = u16;
+}
+impl Sub for u8 {}
+
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce)]
+pub enum FromSuper<T: crate::Sub> {
+    V(T::Assoc),
+    W,
+}
+
+#[into_flat(SuperOuterFlat<P>)]
+pub enum SuperOuter<P: crate::Sub> {
+    #[flatten]
+    FromSuper(FromSuper<P>),
+}
+
+#[flat(SuperOuter<P>)]
+pub enum SuperOuterFlat<P: crate::Sub> {}
+
+#[test]
+fn associated_type_of_a_supertrait_through_a_parameter() {
+    match SuperOuter::<u8>::FromSuper(FromSuper::V(7)).into_flat() {
+        SuperOuterFlat::V(n) => assert_eq!(n, 7u16),
+        SuperOuterFlat::W => unreachable!(),
+    }
+    assert!(matches!(
+        SuperOuter::<u8>::from_flat(SuperOuterFlat::V(1)),
+        SuperOuter::FromSuper(FromSuper::V(1))
+    ));
+}
+
+// With a concrete type, the supertrait is named in the definition.
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce)]
+pub enum FromSuperExplicit<T: crate::Sub> {
+    V(<T as crate::Super>::Assoc),
+}
+
+#[into_flat(SuperExplicitOuterFlat)]
+pub enum SuperExplicitOuter {
+    #[flatten]
+    FromSuperExplicit(FromSuperExplicit<u8>),
+}
+
+#[flat(SuperExplicitOuter)]
+pub enum SuperExplicitOuterFlat {}
+
+#[test]
+fn associated_type_of_a_supertrait_written_with_the_trait() {
+    let SuperExplicitOuterFlat::V(n) =
+        SuperExplicitOuter::FromSuperExplicit(FromSuperExplicit::V(8)).into_flat();
+    assert_eq!(n, 8u16);
+}
+
+// `Sized` and `?Sized` are not trait bounds that `T::Assoc` could belong to, and a bound
+// written in the parameter list and again in the `where` clause is one bound.
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce)]
+pub enum SizedBounds<
+    T: Sized + crate::Tr,
+    U: crate::Tr,
+    V: crate::Tr + crate::Tr,
+    W: ?Sized + crate::Tr,
+> where
+    T: crate::Tr,
+    U: ::core::marker::Sized,
+    V: crate::Tr,
+{
+    S(T::A, U::A, V::A, W::A),
+}
+
+#[into_flat(SizedBoundsOuterFlat)]
+pub enum SizedBoundsOuter {
+    #[flatten]
+    SizedBounds(SizedBounds<u8, u8, u8, u8>),
+}
+
+#[flat(SizedBoundsOuter)]
+pub enum SizedBoundsOuterFlat {}
+
+#[test]
+fn sized_and_repeated_bounds_are_ignored() {
+    let SizedBoundsOuterFlat::S(a, b, c, d) =
+        SizedBoundsOuter::SizedBounds(SizedBounds::S(1, 2, 3, 4)).into_flat();
+    let (a, b, c, d): (u16, u16, u16, u16) = (a, b, c, d);
+    assert_eq!((a, b, c, d), (1, 2, 3, 4));
+}
+
+// A bound of the `Fn` family has no `<_ as Trait>` form, but a parameter of the flat enum
+// brings its own bound along.
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce)]
+pub enum Callable<F: ::core::ops::Fn(u8) -> R, R> {
+    Call(F),
+    Out(F::Output),
+}
+
+#[into_flat(CallableOuterFlat<F, R>)]
+pub enum CallableOuter<F: ::core::ops::Fn(u8) -> R, R> {
+    #[flatten]
+    Callable(Callable<F, R>),
+}
+
+#[flat(CallableOuter<F, R>)]
+pub enum CallableOuterFlat<F: ::core::ops::Fn(u8) -> R, R> {}
+
+#[test]
+fn fn_bound_through_a_parameter() {
+    type Outer = CallableOuter<fn(u8) -> u32, u32>;
+    match Outer::Callable(Callable::Out(5)).into_flat() {
+        CallableOuterFlat::Out(n) => assert_eq!(n, 5u32),
+        CallableOuterFlat::Call(_) => unreachable!(),
+    }
+    let back = Outer::from_flat(CallableOuterFlat::Call(|n| n.into()));
+    match back {
+        CallableOuter::Callable(Callable::Call(f)) => assert_eq!(f(4), 4),
+        _ => unreachable!(),
+    }
+}

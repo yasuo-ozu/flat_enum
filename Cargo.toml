@@ -17,10 +17,10 @@ path = "lib.rs"
 
 [dependencies]
 flat_enum_macro = { path = "macro", version = "0.2.0" }
-announce = "0.1.0"
+announce = "0.1.1"
 
 [workspace]
 
-members = ["macro", "testing"]
+members = ["macro", "testing", "testing/helper"]
 
 resolver = "2"

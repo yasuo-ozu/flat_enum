@@ -1,5 +1,7 @@
 use crate::subst::Subst;
-use crate::util::{enum_of, nested, parse_variants, ParsedVariant};
+use crate::util::{
+    default_krate, enum_of, ident_to_path, nested, parse_variants, private_path, ParsedVariant,
+};
 use announce::helper::{Cont, ContList, Entry, Input, KvArgs};
 use proc_macro2::TokenStream;
 use syn::parse::{Parse, ParseStream};
@@ -63,7 +65,7 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
         structured_path,
         krate,
     } = arg;
-    let krate = krate.unwrap_or(parse_quote!(::flat_enum));
+    let krate = krate.unwrap_or_else(default_krate);
     let (g_impl, g_type, g_where) = input.generics.split_for_impl();
     let macro_name =
         if structured_path.leading_colon.is_none() && structured_path.segments.len() == 1 {
@@ -78,8 +80,8 @@ pub fn flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
         return Err(Error::new(input.span(), "Cannot specify variants"));
     }
     let list = ContList(vec![
-        Cont::bang(parse_quote!(#macro_name)),
-        Cont::bang(parse_quote!(#krate::__private::flat_cb)),
+        Cont::bang(ident_to_path(macro_name)),
+        Cont::bang(private_path(&krate, "flat_cb")),
     ]);
     let trampoline = list.invoke(quote! {
         decl =
@@ -162,7 +164,10 @@ pub fn flat_cb(input: Input) -> Result<TokenStream> {
 fn substituted_fields(subst: &mut Subst, fields: &Fields) -> Result<TokenStream> {
     let mut out = Vec::new();
     for f in fields {
-        let (attrs, vis, ty) = (&f.attrs, &f.vis, subst.apply(&f.ty)?);
+        // Only the docs, as for the variants: other attributes (`#[serde(skip)]`) are
+        // helpers of a derive of the nested enum, which the flat enum does not have.
+        let attrs = f.attrs.iter().filter(|a| a.path().is_ident("doc"));
+        let (vis, ty) = (&f.vis, subst.apply(&f.ty)?);
         out.push(match &f.ident {
             Some(id) => quote! { #(#attrs)* #vis #id : #ty },
             None => quote! { #(#attrs)* #vis #ty },

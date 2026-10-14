@@ -1,0 +1,10 @@
+error[E0576]: cannot find associated type `Assoc` in trait `$crate::Sub`
+  --> tests/ui/supertrait.rs:20:10
+   |
+20 |     V(T::Assoc),
+   |          ^^^^^ not found in `$crate::Sub`
+...
+29 | #[flat(Outer)]
+   | -------------- in this attribute macro expansion
+   |
+   = note: this error originates in the macro `E` which comes from the expansion of the attribute macro `flat` (in Nightly builds, run with -Z macro-backtrace for more info)
