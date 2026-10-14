@@ -1,316 +1,207 @@
-use crate::util::{generic_arg_to_type, getrandom};
-use derive_syn_parse::Parse;
-use proc_macro2::{Span, TokenStream};
-use proc_macro_error::abort;
+use crate::attr_flat::flattened_idents;
+use crate::util::{
+    announce_wrapped, bindings, enum_of, has_flatten, ident_to_path, nested, parse_variants,
+    parse_variants_recovering, push_error, strip_flatten, ParsedVariant,
+};
+use announce::helper::{Cont, ContList, Input, KvArgs};
+use proc_macro2::TokenStream;
+use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::*;
 use template_quote::quote;
 
-fn attribute_is_flatten(attr: &Attribute) -> bool {
-    &attr.style == &AttrStyle::Outer && attr.path.is_ident("flatten")
+pub struct MacroArg {
+    flat_path: Path,
+    krate: Option<Path>,
 }
 
-fn split_path_param(mut path: Path) -> (Path, Vec<Type>) {
-    let v = if let Some(seg) = path.segments.last_mut() {
-        let v = match &seg.arguments {
-            PathArguments::AngleBracketed(args) => {
-                args.args.iter().cloned().map(generic_arg_to_type).collect()
-            }
-            PathArguments::None => Vec::new(),
-            _ => panic!(),
-        };
-        seg.arguments = PathArguments::None;
-        v
-    } else {
-        Vec::new()
-    };
-    (path, v)
-}
-
-#[allow(unused)]
-enum ParsedVariant {
-    Normal(Variant),
-    Flattened {
-        attrs: Vec<Attribute>,
-        ident: Ident,
-        #[allow(unused)]
-        paren_token: syn::token::Paren,
-        ty: Type,
-        macro_path: Path,
-        discriminant: Option<(syn::token::Eq, Expr)>,
-        arg_tys: Vec<Type>,
-    },
-}
-
-impl ParsedVariant {
-    fn new(variant: Variant) -> Self {
-        if variant.attrs.iter().any(attribute_is_flatten) {
-            match &variant.fields {
-                Fields::Unnamed(field)
-                    if field.unnamed.len() == 1 && field.unnamed[0].attrs.len() == 0 =>
-                {
-                    let paren_token = field.paren_token.clone();
-                    let field = &field.unnamed[0];
-                    match &field.ty {
-                        Type::Path(tp) if tp.qself.is_none() => {
-                            let (macro_path, arg_tys) = split_path_param(tp.path.clone());
-                            return ParsedVariant::Flattened {
-                                attrs: variant
-                                    .attrs
-                                    .into_iter()
-                                    .filter(|attr| !attribute_is_flatten(attr))
-                                    .collect(),
-                                ident: variant.ident,
-                                paren_token,
-                                ty: field.ty.clone(),
-                                macro_path,
-                                discriminant: variant.discriminant.clone(),
-                                arg_tys,
-                            };
-                        }
-                        _ => (),
-                    }
-                }
-                _ => (),
-            }
-            abort!(variant.span(), "Bad variant for #[flatten]")
+impl Parse for MacroArg {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let flat_path = input.parse()?;
+        let krate = if input.parse::<Option<Token![@]>>()?.is_some() {
+            Some(input.parse()?)
         } else {
-            ParsedVariant::Normal(variant)
-        }
+            None
+        };
+        Ok(MacroArg { flat_path, krate })
     }
 }
 
-fn serialize_variants(variants: &[ParsedVariant], is_pat: bool) -> (TokenStream, Option<&Path>) {
-    let mut first_macro_path = None;
-    let mut out = TokenStream::new();
-    for variant in variants {
-        match variant {
-            ParsedVariant::Normal(variant) => {
-                match (&variant.fields, is_pat) {
-                    (Fields::Unnamed(_), true) => {
-                        out.extend(quote!{{
-                            #{&variant.ident} (
-                                #(for i in 0..variant.fields.len()), {
-                                    #{Ident::new(&format!("a{}", i), Span::call_site())}
-                                }
-                            )
-                        }});
-                    }
-                    (Fields::Named(_), true) => {
-                        out.extend(quote!{{
-                            #{&variant.ident} {
-                                #(for field in &variant.fields), {
-                                    #{&field.ident}
-                                }
-                            }
-                        }})
-                    }
-                    _ => {
-                        out.extend(quote! {{#variant}});
-                    }
-                }
+/// `#[into_flat(F @ krate)] enum S { .. }`
+///
+/// - emits `S` (without `#[flatten]`) and announces it, so that `#[flat(S)]`
+///   can read it; which variants were `#[flatten]` is recorded as
+///   `meta = flatten(V1, ..)` and read back from the entry META;
+/// - invokes `S! { [S!, into_flat_cb!] .. }`: the callback reads the
+///   cfg-evaluated `S` from its own trampoline and gathers the nested enums'
+///   variants for the `IntoFlat` impl.
+///
+/// A bad `#[flatten]` variant or flat path is reported on top of the normal expansion (the
+/// variant is taken as a normal one, the path by its last segment), so that `S` and `S!` are
+/// still there for `#[flat]`.
+pub fn into_flat(arg: MacroArg, input: ItemEnum) -> Result<TokenStream> {
+    let MacroArg { flat_path, krate } = arg;
+    let krate = match krate {
+        Some(krate) => krate,
+        None => parse2(quote!(::flat_enum))?,
+    };
+    let mut errors = None;
+    let flat_path = if flat_path.leading_colon.is_some() || flat_path.segments.len() != 1 {
+        push_error(
+            &mut errors,
+            Error::new(flat_path.span(), "Should be exist in the same context"),
+        );
+        Path {
+            leading_colon: None,
+            segments: flat_path.segments.last().cloned().into_iter().collect(),
+        }
+    } else {
+        flat_path
+    };
+    let (variants, variant_errors) = parse_variants_recovering(&input, has_flatten);
+    if let Some(e) = variant_errors {
+        push_error(&mut errors, e);
+    }
+    let flattened: Vec<&Ident> = variants
+        .iter()
+        .filter_map(|v| match v {
+            ParsedVariant::Flattened { ident, .. } => Some(ident),
+            _ => None,
+        })
+        .collect();
+
+    let mut stripped = input.clone();
+    stripped
+        .variants
+        .iter_mut()
+        .for_each(|v| v.attrs = strip_flatten(&v.attrs));
+
+    let cb = ContList(vec![
+        Cont::bang(ident_to_path(&input.ident)),
+        Cont::bang(parse2(quote!(#krate::__private::into_flat_cb))?),
+    ]);
+    Ok(quote! {
+        #{errors.map(|e| e.to_compile_error())}
+        #stripped
+        #{announce_wrapped(&krate, quote!(meta = flatten(#(#flattened),*)), &stripped)}
+        #{cb.invoke(quote! { krate = #krate, flat = #flat_path })}
+    })
+}
+
+/// Callback: `into_flat_cb! { [into_flat_cb!] S! => [..] { mod S { enum S } } ENTRY* krate = .., flat = F }`.
+/// `S` is the cfg-evaluated payload of `S`'s own trampoline (oldest entry); its
+/// flattened variants come from the META `flatten(V1, ..)`.
+///
+/// This is where a `#[flatten]` field type that is not an announced enum is reported (once:
+/// `#[flat]`'s callback leaves the variants out silently). The `IntoFlat` impl is then a stub,
+/// so that the bound of `#[flat]`'s `Flat` impl holds.
+pub fn into_flat_cb(input: Input) -> Result<TokenStream> {
+    let mut rest: KvArgs = input.rest_as()?;
+    let (krate, flat_path): (Path, Path) = (rest.require("krate")?, rest.require("flat")?);
+    let s_entry = input
+        .entries_in_order()
+        .next()
+        .ok_or_else(|| Error::new(proc_macro2::Span::call_site(), "flat_enum: no entry"))?;
+    let item = enum_of(s_entry)?;
+    let flat_ids = flattened_idents(s_entry)?;
+    let variants = parse_variants(&item, |v| flat_ids.contains(&v.ident))?;
+    let nested = match nested(&variants, &input) {
+        Ok(nested) => nested,
+        Err(fetch) => return Ok(fetch),
+    };
+    let (mut items, mut errors) = (Vec::new(), None);
+    for n in nested {
+        match n {
+            Ok(n) => items.push(n),
+            Err(e) => push_error(&mut errors, e),
+        }
+    }
+    Ok(match errors {
+        None => emit_impl(&krate, &flat_path, &item, &variants, &items),
+        Some(e) => {
+            let stub = impl_with(
+                &krate,
+                &flat_path,
+                &item,
+                quote!(::core::unreachable!()),
+                quote!(let _ = this; ::core::unreachable!()),
+            );
+            quote! { #{e.to_compile_error()} #stub }
+        }
+    })
+}
+
+fn emit_impl(
+    krate: &Path,
+    flat_path: &Path,
+    input: &ItemEnum,
+    variants: &[ParsedVariant],
+    nested: &[ItemEnum],
+) -> TokenStream {
+    let flat = &flat_path.segments[0].ident;
+    let mut nested_iter = nested.iter();
+    let mut into_arms = Vec::new();
+    let mut from_arms = Vec::new();
+    for v in variants {
+        match v {
+            ParsedVariant::Normal(v) => {
+                let (id, b) = (&v.ident, bindings(&v.fields));
+                into_arms.push(quote! { Self::#id #b => #flat::#id #b });
+                from_arms.push(quote! { #flat::#id #b => Self::#id #b });
             }
             ParsedVariant::Flattened {
                 ident,
                 ty,
                 macro_path,
-                arg_tys,
                 ..
             } => {
-                if first_macro_path.is_none() {
-                    first_macro_path = Some(macro_path);
-                    out.extend(quote! { @ [ #ident, (#ty), #(#arg_tys),* ] });
-                } else {
-                    out.extend(quote! { (#macro_path) [ #ident, (#ty), #(#arg_tys),* ] })
+                let n = nested_iter.next().unwrap();
+                let inner = n.variants.iter().map(|nv| {
+                    let (id, b) = (&nv.ident, bindings(&nv.fields));
+                    quote! { #macro_path::#id #b => #flat::#id #b }
+                });
+                into_arms.push(quote! { Self::#ident(item) => match item { #(#inner,)* } });
+                for nv in &n.variants {
+                    let (id, b) = (&nv.ident, bindings(&nv.fields));
+                    // `<T>::V { .. }` is unstable (`more_qualified_paths`),
+                    // so named variants go through the plain path.
+                    let ctor = match &nv.fields {
+                        Fields::Named(_) => quote! { #macro_path::#id #b },
+                        _ => quote! { <#ty>::#id #b },
+                    };
+                    from_arms.push(quote! { #flat::#id #b => Self::#ident(#ctor) });
                 }
             }
         }
     }
-    (out, first_macro_path)
+    impl_with(
+        krate,
+        flat_path,
+        input,
+        quote! { match self { #(#into_arms,)* } },
+        quote! { match this { #(#from_arms,)* } },
+    )
 }
 
-fn emit_macro_inner(variants: &[ParsedVariant], enum_decl: &TokenStream) -> TokenStream {
-    let (out, first_macro_path) = serialize_variants(variants, false);
-    if let Some(mac) = first_macro_path {
-        quote! {
-            #mac!(
-                @emit_enum
-                #mac
-                { #enum_decl }
-                []
-                #out
-            );
-        }
-    } else {
-        quote! {
-            #enum_decl {
-                #(for variant in variants) {
-                    #(if let ParsedVariant::Normal(variant) = variant) {
-                        #variant,
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn emit_macro(ident: &Ident, variants: &[ParsedVariant]) -> TokenStream {
-    let random_module_ident = Ident::new(
-        &format!("flat_enum_module_{:x}_{}", getrandom(), ident.to_string()),
-        Span::call_site(),
-    );
-    let random_macro_ident = Ident::new(
-        &format!(
-            "flat_enum_macro_{:x}_{}",
-            getrandom(),
-            ident
-        ),
-        Span::call_site(),
-    );
-    let inner = emit_macro_inner(variants, &quote! { $($enum_decl)* });
-    quote! {
-        #[allow(non_snake_case)]
-        mod #random_module_ident {
-            #[macro_export]
-            macro_rules! #random_macro_ident {
-                (@emit_enum
-                    flat_enum = #{env!("CARGO_PKG_VERSION")},
-                    enum_decl = { $($enum_decl:tt)* },
-                ) => { #inner };
-            }
-            #[allow(unused)]
-            pub use #random_macro_ident as #ident;
-        }
-        #[allow(unused)]
-        use #random_module_ident::*;
-    }
-}
-
-fn emit_into_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream {
-    quote! {
-        #(for variant in variants) {
-            #(if let ParsedVariant::Normal(variant) = variant) {
-                Self :: #{ &variant.ident }
-                #(if let Fields::Named(fields) = &variant.fields) {
-                    {
-                        #(for field in &fields.named) {
-                            #{&field.ident}
-                        }
-                    } => #ident_flat :: #{ &variant.ident } {
-                        #(for field in &fields.named) {
-                            #{&field.ident}
-                        }
-                    }
-                }
-                #(if let Fields::Unnamed(fields) = &variant.fields) {
-                    #(let ids = (0..fields.unnamed.len()).map(|i| Ident::new(&format!("a{}", i), Span::call_site())).collect::<Vec<_>>()){
-                        ( #(#ids),* ) => #ident_flat :: #{ &variant.ident } (#(#ids),*)
-                    }
-                }
-                #(if let Fields::Unit = &variant.fields) {
-                    => #ident_flat:: #{ &variant.ident }
-                }
-            }
-            #(if let ParsedVariant::Flattened{ident, macro_path, ..} = variant) {
-                Self :: #ident (item) => {
-                    #macro_path ! (@emit_flat item, (#macro_path), #ident_flat)
-                }
-            },
-        }
-    }
-}
-
-fn emit_from_flat(ident_flat: &Ident, variants: &[ParsedVariant]) -> TokenStream {
-    let (out, first_macro_path) = serialize_variants(variants, true);
-    if let Some(mac) = first_macro_path {
-        quote! {
-            #mac!(
-                @emit_unflat #mac []
-                (this, #ident_flat, Self)
-                #out
-            );
-        }
-    } else {
-        quote! {
-            match this {
-                #(for variant in variants) {
-                    #(if let ParsedVariant::Normal(variant) = variant) {
-                        #ident_flat :: #{ &variant.ident }
-                        #(if let Fields::Named(fields) = &variant.fields) {
-                            {
-                                #(for field in &fields.named) {
-                                    #{&field.ident}
-                                }
-                            } => Self :: #{ &variant.ident } {
-                                #(for field in &fields.named) {
-                                    #{&field.ident}
-                                }
-                            }
-                        }
-                        #(if let Fields::Unnamed(fields) = &variant.fields) {
-                            #(let ids = (0..fields.unnamed.len()).map(|i| Ident::new(&format!("a{}", i), Span::call_site())).collect::<Vec<_>>()){
-                                ( #(#ids),* ) => Self :: #{ &variant.ident } (#(#ids),*)
-                            }
-                        }
-                        #(if let Fields::Unit = &variant.fields) {
-                            => Self:: #{ &variant.ident }
-                        }
-                    },
-                }
-            }
-        }
-    }
-}
-
-#[derive(Parse)]
-pub struct MacroArg {
-    flat_path: Path,
-    _at_token: Option<Token![@]>,
-    #[parse_if(_at_token.is_some())]
-    krate: Option<Path>,
-}
-
-pub fn into_flat(arg: MacroArg, mut input: ItemEnum) -> TokenStream {
-    let MacroArg {
-        flat_path, krate, ..
-    } = arg;
-    let krate = krate.unwrap_or(parse_quote!(::flat_enum));
+/// `impl IntoFlat for S` with the given bodies of `into_flat` and `from_flat`.
+fn impl_with(
+    krate: &Path,
+    flat_path: &Path,
+    input: &ItemEnum,
+    into_body: TokenStream,
+    from_body: TokenStream,
+) -> TokenStream {
     let (g_impl, g_type, g_where) = input.generics.split_for_impl();
-    let flat_name = if flat_path.leading_colon.is_none() && flat_path.segments.len() == 1 {
-        &flat_path.segments[0].ident
-    } else {
-        abort!(flat_path.span(), "Should be exist in the same context");
-    };
-    let variants: Vec<_> = input
-        .variants
-        .iter()
-        .cloned()
-        .map(ParsedVariant::new)
-        .collect();
-    let mac_def = emit_macro(&input.ident, &variants[..]);
-    let fn_into_flat = emit_into_flat(&flat_name, &variants[..]);
-    let fn_from_flat = emit_from_flat(&flat_name, &variants[..]);
-    input.variants.iter_mut().for_each(|variant| {
-        let attrs = variant.attrs.clone();
-        variant.attrs = attrs
-            .into_iter()
-            .filter(|attr| !attr.path.is_ident("flatten"))
-            .collect();
-    });
     quote! {
-        #input
-        #mac_def
         #[automatically_derived]
-        unsafe impl #g_impl #krate::IntoFlat for #{&input.ident} #g_type #g_where {
+        impl #g_impl #krate::IntoFlat for #{&input.ident} #g_type #g_where {
             type Flat = #flat_path;
             fn into_flat(self) -> Self::Flat {
-                match self {
-                    #fn_into_flat
-                }
+                #into_body
             }
 
             fn from_flat(this: Self::Flat) -> Self {
-                #fn_from_flat
+                #from_body
             }
         }
     }

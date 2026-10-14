@@ -1,6 +1,8 @@
-use flat_enum::{flat, into_flat, testing::Enum6, FlatTarget};
+use flat_enum::announce::Announce;
+use flat_enum::{flat, into_flat, testing::Enum6};
 
-#[derive(FlatTarget)]
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum1<A> {
     E1(A),
     E2(),
@@ -8,7 +10,8 @@ pub enum Enum1<A> {
 }
 
 #[allow(unused)]
-#[derive(FlatTarget)]
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce)]
 pub enum Enum2<B> {
     E4(B),
     E5(),
@@ -25,16 +28,18 @@ pub enum Enum3<A, B> {
 }
 
 #[flat(Enum3<A, B>)]
-#[derive(FlatTarget)]
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum3Flat<A, B> {}
 
 #[test]
 fn test_enum3() {}
 
 mod m1 {
-    use flat_enum::FlatTarget;
-    #[derive(FlatTarget)]
-    pub enum Enum4<'a, const N: usize, A> {
+    use flat_enum::announce::Announce;
+    #[derive(Announce)]
+    #[announce(crate = ::flat_enum::announce)]
+    pub enum Enum4<'a, A, const N: usize> {
         E7(&'a str, [A; N]),
     }
 }
@@ -46,9 +51,9 @@ pub mod m2 {
         #[flatten]
         MyEnum3(super::Enum3Flat<A, A>),
         #[flatten]
-        MyEnum4(super::m1::Enum4<'a, 3, A>),
+        MyEnum4(super::m1::Enum4<'a, A, 3>),
         #[flatten]
-        MyEnum6(super::Enum6<'a, 4, A>),
+        MyEnum6(super::Enum6<'a, A, 4>),
     }
 
     #[flat(Enum5<'a, A>)]

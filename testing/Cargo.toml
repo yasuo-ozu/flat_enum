@@ -1,6 +1,6 @@
 [package]
 name = "test_flat_enum"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "Expand nested enum into flattened enum"
 license = "MIT"
@@ -9,8 +9,18 @@ categories = ["data-structure"]
 repository = "https://github.com/yasuo-ozu/flat_enum"
 publish = false
 
+[features]
+# `define_repeater!` of announce needs Rust 1.59, the tests of the MSRV (1.57) run without it.
+default = ["repeater"]
+repeater = []
+
 [lib]
 path = "lib.rs"
 
-[dependencies]
-flat_enum = { features = ["testing"], path = "..", version = "0.1.1" }
+[[test]]
+name = "repeater"
+required-features = ["repeater"]
+
+[dev-dependencies]
+flat_enum = { features = ["testing"], path = "..", version = "0.2.0" }
+test_flat_enum_helper = { path = "helper" }

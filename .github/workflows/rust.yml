@@ -17,5 +17,70 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --workspace --verbose
     - run: cargo test --manifest-path=testing/Cargo.toml
+    - name: Install nightly Rust (for the UI tests)
+      run: rustup toolchain install nightly --profile minimal
+    - name: Run the UI tests
+      # ui/ is a separate package, left out of the workspace and of the MSRV job: trybuild
+      # needs a newer Rust than 1.57. It compares the compiler output with the snapshots in
+      # ui/tests/ui, which were recorded with a nightly rustc; other versions word some errors
+      # differently.
+      working-directory: ui
+      run: cargo +nightly test --verbose
+
+  fmt:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - run: cargo fmt --all --check
+
+  clippy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # rust-version is 1.57. cargo 1.57 can read neither the lockfile nor the sparse index that
+  # current cargo writes and uses, so the dependencies are resolved and vendored by the
+  # stable cargo (to the newest versions that the MSRV allows), and 1.57 builds offline.
+  msrv:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install toolchains
+      run: rustup toolchain install stable 1.57.0 --profile minimal
+    - name: Prepare a copy with vendored dependencies
+      run: |
+        set -eu
+        copy="$RUNNER_TEMP/msrv"
+        mkdir "$copy"
+        tar --exclude=./target --exclude=./.git --exclude=./Cargo.lock -cf - . | tar -xf - -C "$copy"
+        cd "$copy"
+        # There are no dev-dependencies to drop. If one needs a newer Rust than 1.57, remove
+        # it from the manifest here. A crate that does not declare its rust-version can be
+        # held back with `cargo +stable update -p <crate> --precise <version>` here.
+        CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo +stable generate-lockfile
+        cargo +stable vendor vendor > /dev/null
+        mkdir .cargo
+        printf '%s\n' \
+          '[source.crates-io]' \
+          'replace-with = "vendored-sources"' \
+          '[source.vendored-sources]' \
+          'directory = "vendor"' \
+          > .cargo/config.toml
+    # The `repeater` test needs Rust 1.59 (announce::define_repeater!), so it is left out.
+    - name: Build with 1.57
+      run: cargo +1.57.0 build --offline --workspace --no-default-features
+      working-directory: ${{ runner.temp }}/msrv
+    - name: Test with 1.57
+      run: |
+        cargo +1.57.0 test --offline --workspace --no-default-features
+        cargo +1.57.0 test --offline --features testing
+      working-directory: ${{ runner.temp }}/msrv

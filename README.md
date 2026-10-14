@@ -10,8 +10,9 @@
 This crate expands nesting enums. See the example:
 
 ```
-# use flat_enum::{flat, into_flat, FlatTarget};
-#[derive(FlatTarget)]
+# use flat_enum::{flat, into_flat};
+#[derive(flat_enum::announce::Announce)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum1<A> {
     E1(A),
     E2(),

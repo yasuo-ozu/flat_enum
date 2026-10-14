@@ -1,0 +1,5 @@
+error: Should be exist in the same context
+ --> tests/ui/flat_path.rs:5:13
+  |
+5 | #[into_flat(self::OuterFlat)]
+  |             ^^^^^^^^^^^^^^^

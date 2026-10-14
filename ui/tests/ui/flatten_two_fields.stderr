@@ -1,0 +1,6 @@
+error: Bad variant for #[flatten]
+  --> tests/ui/flatten_two_fields.rs:14:5
+   |
+14 | /     #[flatten]
+15 | |     X(E, u8),
+   | |____________^

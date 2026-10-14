@@ -1,4 +1,5 @@
-use flat_enum::{flat,into_flat, FlatTarget};
+use flat_enum::announce::Announce;
+use flat_enum::{flat, into_flat};
 
 #[into_flat(EnumAFlat<Q>)]
 pub enum EnumA<Q> {
@@ -8,17 +9,19 @@ pub enum EnumA<Q> {
 }
 
 #[flat(EnumA<Q>)]
-#[derive(FlatTarget)]
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum EnumAFlat<Q> {}
 
 #[into_flat(EnumBFlat<Q>)]
- pub enum EnumB<Q> {
-     #[flatten]
-     EnumA(EnumAFlat<Q>),
-     E4(Q, Q, Q),
-     E5(Q),
- }
+pub enum EnumB<Q> {
+    #[flatten]
+    EnumA(EnumAFlat<Q>),
+    E4(Q, Q, Q),
+    E5(Q),
+}
 
 #[flat(EnumB<Q>)]
-#[derive(FlatTarget)]
+#[derive(Announce)]
+#[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum EnumBFlat<Q> {}
