@@ -1,18 +1,18 @@
 //! Non-`pub` definitions: announce emits a local macro_rules + `<vis> use`,
 //! produced several expansion levels deep (derive -> #[announce] -> capture).
 #![allow(dead_code)]
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, IntoFlat};
 
-#[derive(Announce, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce)]
+#[derive(Debug, PartialEq)]
 enum P1 {
     A(u8),
     B,
 }
 
-#[derive(Announce, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum P2 {
     C,
 }

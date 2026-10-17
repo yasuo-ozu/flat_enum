@@ -1,9 +1,8 @@
 //! The flat enum has the generic parameters of its declaration: constants, bounds and the
 //! `where` clause are kept.
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, IntoFlat};
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Inner<T, const N: usize> {
     V([T; N]),
@@ -32,7 +31,6 @@ mod m {
     pub struct L;
 }
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Plain<T> {
     P(T),

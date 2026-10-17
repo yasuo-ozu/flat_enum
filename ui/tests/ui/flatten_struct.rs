@@ -1,16 +1,14 @@
 // The type of a `#[flatten]` field must be an announced enum. The error is reported once, by
 // `#[into_flat]`: `#[flat]` emits the flat enum without the variants of the struct, but with the
 // others.
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat};
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub struct NotEnum {
     pub x: u8,
 }
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum E {
     V(u8),

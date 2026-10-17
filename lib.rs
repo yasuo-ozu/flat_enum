@@ -5,8 +5,7 @@
 ///
 /// ```
 /// # use flat_enum::{flat, into_flat};
-/// # #[derive(flat_enum::announce::Announce)]
-/// # #[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
+/// # #[flat_enum::announce::announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 /// # pub enum Enum1<A> {
 /// #     E1(A),
 /// #     E2(),
@@ -34,15 +33,13 @@
 ///
 /// ## Announcing the flat enum
 ///
-/// To use the flat enum as the field of a `#[flatten]` variant, announce it. `#[flat]` has to
-/// be the first attribute, above `#[derive(Announce)]` and `#[announce(..)]`, because it fills in
-/// the variants before the enum is announced. With the derive written above `#[flat]`, rustc
-/// reports errors like ``cannot find attribute `announce` `` instead of pointing at the order.
+/// To use the flat enum as the field of a `#[flatten]` variant, announce it with
+/// `#[announce(..)]`, above or below `#[flat]`: the enum is announced after `#[flat]` has filled
+/// in its variants.
 ///
 /// ```
 /// # use flat_enum::{flat, into_flat};
-/// # #[derive(flat_enum::announce::Announce)]
-/// # #[announce(crate = ::flat_enum::announce)]
+/// # #[flat_enum::announce::announce(crate = ::flat_enum::announce)]
 /// # pub enum Enum1 {
 /// #     E1(u8),
 /// # }
@@ -52,8 +49,7 @@
 /// #     Enum1(Enum1),
 /// # }
 /// #[flat(Enum2)]
-/// #[derive(flat_enum::announce::Announce)]
-/// #[announce(crate = ::flat_enum::announce)]
+/// #[flat_enum::announce::announce(crate = ::flat_enum::announce)]
 /// pub enum Enum2Flat {}
 /// ```
 pub use flat_enum_macro::flat;
@@ -62,8 +58,7 @@ pub use flat_enum_macro::flat;
 ///
 /// ```
 /// # use flat_enum::{flat, into_flat};
-/// # #[derive(flat_enum::announce::Announce)]
-/// # #[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
+/// # #[flat_enum::announce::announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 /// # pub enum Enum1<A> {
 /// #     E1(A),
 /// #     E2(),
@@ -94,22 +89,21 @@ pub use flat_enum_macro::flat;
 /// Due to the effect of `#[into_flat]` macro, variants defined with `#[flatten]`
 /// attribute is expanded in the corresponding flat enum. The variant should have tuple-like
 /// fields, and just one field with type, which is an enum announced with
-/// `#[derive(Announce)]` or `#[announce]` (see the [`announce`] crate). The type may have
+/// `#[announce]` (see the [`announce`] crate). The type may have
 /// generic arguments, lifetimes and constants included.
 pub use flat_enum_macro::into_flat;
 
 /// The [`announce`] crate, which announces the enums that `#[flatten]` takes:
 ///
 /// ```
-/// #[derive(flat_enum::announce::Announce)]
-/// #[announce(crate = ::flat_enum::announce)]
+/// #[flat_enum::announce::announce(crate = ::flat_enum::announce)]
 /// pub enum Inner {
 ///     A(u8),
 ///     B,
 /// }
 /// ```
 ///
-/// An enum that is flattened needs `#[derive(Announce)]` or `#[announce]` and nothing else. The
+/// An enum that is flattened needs `#[announce]` and nothing else. The
 /// types in its fields have to resolve in the calling crate, which announce checks where the enum is
 /// defined: write `crate::..` and `::krate::..` paths, add `allow_std_prelude = true` for `String`,
 /// `Vec<..>` and the like, or give announce a `repeater` for the types of the defining crate
@@ -124,7 +118,7 @@ pub use flat_enum_macro::into_flat;
 /// definition.
 ///
 /// If a `#[flatten]` field type is not announced, rustc reports ``cannot find macro `E` ``;
-/// add the derive to `E`.
+/// add `#[announce]` to `E`.
 pub use announce;
 
 /// See [`into_flat`]
@@ -157,8 +151,7 @@ pub mod __private {
 pub mod testing {
     macro_rules! emit_enum6 {
         () => {
-            #[derive($crate::announce::Announce)]
-            #[announce(crate = $crate::announce)]
+            #[$crate::announce::announce(crate = $crate::announce)]
             pub enum Enum6<'a, A, const N: usize> {
                 E8(&'a [A; N]),
             }
