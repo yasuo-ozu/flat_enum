@@ -1,7 +1,6 @@
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, testing::Enum6};
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum1<A> {
     E1(A),
@@ -10,7 +9,6 @@ pub enum Enum1<A> {
 }
 
 #[allow(unused)]
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Enum2<B> {
     E4(B),
@@ -28,7 +26,6 @@ pub enum Enum3<A, B> {
 }
 
 #[flat(Enum3<A, B>)]
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum3Flat<A, B> {}
 
@@ -36,8 +33,7 @@ pub enum Enum3Flat<A, B> {}
 fn test_enum3() {}
 
 mod m1 {
-    use flat_enum::announce::Announce;
-    #[derive(Announce)]
+    use flat_enum::announce::announce;
     #[announce(crate = ::flat_enum::announce)]
     pub enum Enum4<'a, A, const N: usize> {
         E7(&'a str, [A; N]),

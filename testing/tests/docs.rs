@@ -1,11 +1,10 @@
 //! The docs of the variants are kept in the flat enum, so `#![deny(missing_docs)]` is satisfied.
 #![deny(missing_docs)]
 
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, IntoFlat};
 
 /// Announced, with docs on its variants.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce, docs = true)]
 pub enum Inner {
     /// An `Inner` variant.

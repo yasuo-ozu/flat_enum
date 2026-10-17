@@ -1,14 +1,14 @@
 //! Field types are taken from the announced definition: the same type spelled `crate::Foo` twice
 //! (announce rewrites it to `$crate::Foo` in the payload) and a repeated type, in a variant with
 //! named fields.
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, IntoFlat};
 
 #[derive(Debug, PartialEq)]
 pub struct Foo(pub u8);
 
-#[derive(Announce, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce)]
+#[derive(Debug, PartialEq)]
 pub enum L1 {
     A(crate::Foo),
     B { x: crate::Foo, y: u8, z: u8 },

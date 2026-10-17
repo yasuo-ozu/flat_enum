@@ -17,9 +17,8 @@ pub fn ident_to_path(ident: &Ident) -> Path {
     }
 }
 
-/// The enum of an entry: an enum announced with `#[derive(announce::Announce)]` or
-/// `#[announce]`, or the module-wrapped copy that `#[into_flat]` announces
-/// (see [`announce_wrapped`]).
+/// The enum of an entry: an enum announced with `#[announce]`, or the module-wrapped copy that
+/// `#[into_flat]` announces (see [`announce_wrapped`]).
 ///
 /// The types of an enum announced with a `repeater` are written through it
 /// (announce's `type_leak`), so that they resolve in the calling crate.
@@ -27,8 +26,7 @@ pub fn enum_of(entry: &Entry) -> Result<ItemEnum> {
     let bad = |span: Span| {
         Error::new(
             span,
-            "flat_enum: #[flatten] field type must be an enum announced with \
-             #[derive(announce::Announce)] or #[announce]",
+            "flat_enum: #[flatten] field type must be an enum announced with #[announce]",
         )
     };
     let mut item = entry.item()?;
