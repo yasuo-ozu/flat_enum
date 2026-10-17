@@ -26,14 +26,16 @@ pub fn flat(attr: TokenStream, input: TokenStream) -> TokenStream {
     .into()
 }
 
-announce::helper::callback! {
-    /// announce callback of `#[flat]`.
-    #[doc(hidden)]
-    pub fn __flat_cb(input) { attr_flat::flat_cb(input) }
+/// announce callback of `#[flat]`.
+#[doc(hidden)]
+#[proc_macro]
+pub fn __flat_cb(input: TokenStream) -> TokenStream {
+    announce::helper::callback(input.into(), attr_flat::flat_cb).into()
 }
 
-announce::helper::callback! {
-    /// announce callback of `#[into_flat]`.
-    #[doc(hidden)]
-    pub fn __into_flat_cb(input) { attr_into_flat::into_flat_cb(input) }
+/// announce callback of `#[into_flat]`.
+#[doc(hidden)]
+#[proc_macro]
+pub fn __into_flat_cb(input: TokenStream) -> TokenStream {
+    announce::helper::callback(input.into(), attr_into_flat::into_flat_cb).into()
 }

@@ -1,6 +1,5 @@
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat};
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce, allow_std_prelude = true)]
 pub enum Enum1<A> {
     E1(A),

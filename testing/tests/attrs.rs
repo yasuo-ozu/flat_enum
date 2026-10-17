@@ -1,11 +1,11 @@
 //! Only the docs of a field are copied to the flat enum. Another attribute on it belongs to a
 //! derive of the nested enum (`#[serde(skip)]`), which the flat enum does not have.
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, IntoFlat};
 use test_flat_enum_helper::Helper;
 
-#[derive(Announce, Helper, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce, docs = true)]
+#[derive(Helper, Debug, PartialEq)]
 pub enum Inner {
     /// A tuple variant.
     V(#[helper(skip)] u8),

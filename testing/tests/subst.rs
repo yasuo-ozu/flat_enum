@@ -3,12 +3,12 @@
 //! would break a replacement that is naive in one way, and the round trips check the types.
 #![allow(clippy::type_complexity)]
 
-use flat_enum::announce::Announce;
+use flat_enum::announce::announce;
 use flat_enum::{flat, into_flat, IntoFlat};
 
 // Parameters used in the other order: a replacement must not be replaced again.
-#[derive(Announce, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce)]
+#[derive(Debug, PartialEq)]
 pub enum Pair<A, B> {
     P(A, B),
     Q { b: B },
@@ -56,8 +56,8 @@ fn argument_with_arguments() {
 }
 
 // Lifetimes, constants (a literal and a block), arrays and `Self`.
-#[derive(Announce, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce)]
+#[derive(Debug, PartialEq)]
 pub enum Arr<'a, T, const N: usize> {
     Slice(&'a [T; N]),
     Nested {
@@ -128,7 +128,6 @@ fn lifetimes_constants_and_self() {
 }
 
 // An associated type of a parameter, written with the trait.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Assoc<I: ::core::iter::Iterator> {
     Item(<I as ::core::iter::Iterator>::Item),
@@ -153,8 +152,8 @@ fn associated_type() {
 }
 
 // Defaults of the parameters.
-#[derive(Announce, Debug, PartialEq)]
 #[announce(crate = ::flat_enum::announce)]
+#[derive(Debug, PartialEq)]
 pub enum Defaults<A = u8, B = ::std::vec::Vec<A>> {
     D(A, B),
 }
@@ -178,7 +177,7 @@ fn defaulted_parameters() {
     );
 }
 
-// `#[announce]` on the enum instead of the derive.
+// `#[announce]` written with its full path, nothing imported.
 #[flat_enum::announce::announce(crate = ::flat_enum::announce)]
 #[derive(Debug, PartialEq)]
 pub enum Attr {
@@ -217,7 +216,6 @@ impl Conv<u8> for u16 {
     type Out = u32;
 }
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Shorthand<T: crate::Tr, U>
 where
@@ -249,7 +247,6 @@ fn associated_type_shorthand() {
 }
 
 // A bound with associated type constraints, and a generic bound.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Constrained<I: ::core::iter::Iterator<Item = u8>, X, T: crate::Conv<X>> {
     Item(I::Item),
@@ -278,7 +275,6 @@ fn constrained_and_generic_bounds() {
 
 // A lifetime bound by `for<..>` is not the parameter of the same name, and is renamed when
 // the argument mentions a lifetime with its name.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Higher<'a> {
     Fn(for<'b> fn(&'b u8, &'a u8) -> &'b u8),
@@ -351,7 +347,6 @@ impl Super for u8 {
 }
 impl Sub for u8 {}
 
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum FromSuper<T: crate::Sub> {
     V(T::Assoc),
@@ -380,7 +375,6 @@ fn associated_type_of_a_supertrait_through_a_parameter() {
 }
 
 // With a concrete type, the supertrait is named in the definition.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum FromSuperExplicit<T: crate::Sub> {
     V(<T as crate::Super>::Assoc),
@@ -404,7 +398,6 @@ fn associated_type_of_a_supertrait_written_with_the_trait() {
 
 // `Sized` and `?Sized` are not trait bounds that `T::Assoc` could belong to, and a bound
 // written in the parameter list and again in the `where` clause is one bound.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum SizedBounds<
     T: Sized + crate::Tr,
@@ -438,7 +431,6 @@ fn sized_and_repeated_bounds_are_ignored() {
 
 // A bound of the `Fn` family has no `<_ as Trait>` form, but a parameter of the flat enum
 // brings its own bound along.
-#[derive(Announce)]
 #[announce(crate = ::flat_enum::announce)]
 pub enum Callable<F: ::core::ops::Fn(u8) -> R, R> {
     Call(F),

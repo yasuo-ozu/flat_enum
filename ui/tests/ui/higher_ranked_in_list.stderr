@@ -1,10 +1,10 @@
 error: flat_enum: write `<T as Trait>::A` instead of `T::A` in a flattened enum: `T` has a higher-ranked trait bound
-  --> tests/ui/higher_ranked_in_list.rs:16:7
+  --> tests/ui/higher_ranked_in_list.rs:15:7
    |
-16 |     V(T::A),
+15 |     V(T::A),
    |       ^^^^
 ...
-25 | #[flat(Outer)]
+24 | #[flat(Outer)]
    | -------------- in this attribute macro expansion
    |
    = note: this error originates in the macro `E` which comes from the expansion of the attribute macro `flat` (in Nightly builds, run with -Z macro-backtrace for more info)

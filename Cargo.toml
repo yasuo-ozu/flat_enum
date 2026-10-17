@@ -17,7 +17,7 @@ path = "lib.rs"
 
 [dependencies]
 flat_enum_macro = { path = "macro", version = "0.2.0" }
-announce = "0.1.1"
+announce = "0.2.0"
 
 [workspace]
 

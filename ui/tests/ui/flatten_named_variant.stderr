@@ -1,6 +1,6 @@
 error: Bad variant for #[flatten]
-  --> tests/ui/flatten_named_variant.rs:14:5
+  --> tests/ui/flatten_named_variant.rs:13:5
    |
-14 | /     #[flatten]
-15 | |     X { e: E },
+13 | /     #[flatten]
+14 | |     X { e: E },
    | |______________^
